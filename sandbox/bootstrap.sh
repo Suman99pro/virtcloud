@@ -85,10 +85,10 @@ mkdir -p /tmp/virtcloud-sandbox/{control-plane,worker-01,worker-02}
 
 kind create cluster \
   --name "${CLUSTER_NAME}" \
-  --config sandbox/kind-cluster.yaml \
-  --wait 120s
+  --config sandbox/kind-cluster.yaml
 
-success "3-node cluster created"
+# Nodes will be NotReady until CNI is installed — that's expected
+info "Cluster created (nodes NotReady until CNI installs — this is normal)"
 kubectl get nodes
 
 # ── Install CNI ───────────────────────────────────────────────────────────────
@@ -121,28 +121,44 @@ info "Installing storage: ${STORAGE_PLUGIN}..."
 
 case "$STORAGE_PLUGIN" in
   local-path)
-    # Lightweight Rancher local-path — no Helm, no heavy pods, installs in seconds
-    info "Installing local-path-provisioner (lightweight, recommended for sandbox)..."
-    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+    info "Configuring local-path StorageClass (KinD includes this by default)..."
 
-    info "Waiting for local-path-provisioner to be ready..."
-    kubectl wait --for=condition=Available \
-      deployment/local-path-provisioner \
-      -n local-path-storage \
-      --timeout=120s
+    # KinD already installs local-path — we just need to ensure it is the default
+    # and the provisioner pod is running. No reinstall needed.
+    if kubectl get storageclass local-path &>/dev/null; then
+      info "local-path StorageClass already present (installed by KinD)"
+    else
+      # Fallback: install manually if not present
+      info "Installing local-path-provisioner manually..."
+      kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+    fi
 
+    # Mark as default StorageClass
     kubectl patch storageclass local-path \
-      -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
-    success "local-path-provisioner installed and set as default StorageClass"
+      -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
+      2>/dev/null || true
+
+    # Wait for the provisioner pod to be Running (not Deployment Available)
+    info "Waiting for local-path-provisioner pod to be Running..."
+    for i in $(seq 1 30); do
+      POD_STATUS=$(kubectl get pods -n local-path-storage \
+        -l app=local-path-provisioner \
+        -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
+      if [[ "$POD_STATUS" == "Running" ]]; then
+        break
+      fi
+      info "  pod status: ${POD_STATUS:-Pending} — waiting (${i}/30)..."
+      sleep 5
+    done
+
+    success "local-path StorageClass ready"
+    kubectl get storageclass
     ;;
   openebs)
-    # Full OpenEBS — heavier, needs more RAM and time. Only use if you have 12GB+ RAM.
     warn "OpenEBS can take 10+ min and requires 12GB+ RAM in sandbox."
     warn "If it times out, re-run with: STORAGE_PLUGIN=local-path bash sandbox/bootstrap.sh"
     helm repo add openebs https://openebs.github.io/charts --force-update
     helm repo update
-
-    # Install only the hostpath engine — skip mayastor, lvm, zfs (too heavy for sandbox)
     helm install openebs openebs/openebs \
       --namespace openebs \
       --create-namespace \
@@ -154,7 +170,6 @@ case "$STORAGE_PLUGIN" in
       --set ndmOperator.enabled=false \
       --timeout 15m \
       --wait
-
     kubectl apply -f - <<'YAML'
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
