@@ -8,7 +8,7 @@
 set -euo pipefail
 
 CNI_PLUGIN="${CNI_PLUGIN:-flannel}"
-STORAGE_PLUGIN="${STORAGE_PLUGIN:-openebs}"
+STORAGE_PLUGIN="${STORAGE_PLUGIN:-local-path}"
 KUBEVIRT_VERSION="${KUBEVIRT_VERSION:-v1.2.0}"
 CDI_VERSION="${CDI_VERSION:-v1.58.1}"
 KIND_VERSION="${KIND_VERSION:-v0.23.0}"
@@ -120,16 +120,40 @@ kubectl get nodes
 info "Installing storage: ${STORAGE_PLUGIN}..."
 
 case "$STORAGE_PLUGIN" in
+  local-path)
+    # Lightweight Rancher local-path — no Helm, no heavy pods, installs in seconds
+    info "Installing local-path-provisioner (lightweight, recommended for sandbox)..."
+    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+
+    info "Waiting for local-path-provisioner to be ready..."
+    kubectl wait --for=condition=Available \
+      deployment/local-path-provisioner \
+      -n local-path-storage \
+      --timeout=120s
+
+    kubectl patch storageclass local-path \
+      -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+    success "local-path-provisioner installed and set as default StorageClass"
+    ;;
   openebs)
+    # Full OpenEBS — heavier, needs more RAM and time. Only use if you have 12GB+ RAM.
+    warn "OpenEBS can take 10+ min and requires 12GB+ RAM in sandbox."
+    warn "If it times out, re-run with: STORAGE_PLUGIN=local-path bash sandbox/bootstrap.sh"
     helm repo add openebs https://openebs.github.io/charts --force-update
     helm repo update
+
+    # Install only the hostpath engine — skip mayastor, lvm, zfs (too heavy for sandbox)
     helm install openebs openebs/openebs \
       --namespace openebs \
       --create-namespace \
       --set engines.replicated.mayastor.enabled=false \
       --set engines.local.lvm.enabled=false \
       --set engines.local.zfs.enabled=false \
-      --wait --timeout 5m
+      --set localpv-provisioner.enabled=true \
+      --set ndm.enabled=false \
+      --set ndmOperator.enabled=false \
+      --timeout 15m \
+      --wait
 
     kubectl apply -f - <<'YAML'
 apiVersion: storage.k8s.io/v1
@@ -147,14 +171,8 @@ parameters:
 YAML
     success "OpenEBS installed"
     ;;
-  local-path)
-    kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
-    kubectl patch storageclass local-path \
-      -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
-    success "local-path-provisioner installed"
-    ;;
   *)
-    die "Sandbox supports: openebs | local-path"
+    die "Sandbox supports: local-path (recommended) | openebs"
     ;;
 esac
 
@@ -227,7 +245,7 @@ echo -e "${BOLD}${GREEN}║     VirtCloud Sandbox Ready! 🎉                   
 echo -e "${BOLD}${GREEN}╠══════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  Nodes:    3 (1 control-plane + 2 workers)           ║${NC}"
 echo -e "${GREEN}║  CNI:      ${CNI_PLUGIN}                                    ║${NC}"
-echo -e "${GREEN}║  Storage:  ${STORAGE_PLUGIN}                                ║${NC}"
+echo -e "${GREEN}║  Storage:  ${STORAGE_PLUGIN}                             ║${NC}"
 echo -e "${GREEN}║  KubeVirt: ${KUBEVIRT_VERSION} (emulation mode)             ║${NC}"
 echo -e "${GREEN}╠══════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  UI:       http://localhost:30080                    ║${NC}"

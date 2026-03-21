@@ -114,34 +114,27 @@ kubectl -n kube-flannel patch daemonset kube-flannel-ds \
 kubectl wait --for=condition=Ready nodes --all --timeout=300s
 ```
 
-### 4. Install OpenEBS
+### 4. Install local-path-provisioner (default storage)
+
+`local-path` is used instead of OpenEBS in the sandbox — it installs in seconds with no Helm chart and no heavy pods.
 
 ```bash
-helm repo add openebs https://openebs.github.io/charts
-helm repo update
-helm install openebs openebs/openebs \
-  --namespace openebs \
-  --create-namespace \
-  --set engines.replicated.mayastor.enabled=false \
-  --set engines.local.lvm.enabled=false \
-  --set engines.local.zfs.enabled=false \
-  --wait --timeout 5m
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
 
-kubectl apply -f - <<'EOF'
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: openebs-hostpath
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: openebs.io/local
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
-parameters:
-  StorageType: hostpath
-  BasePath: /var/openebs/local
-EOF
+kubectl wait --for=condition=Available \
+  deployment/local-path-provisioner \
+  -n local-path-storage \
+  --timeout=120s
+
+kubectl patch storageclass local-path \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+
+kubectl get storageclass
+# NAME                   PROVISIONER             DEFAULT
+# local-path (default)   rancher.io/local-path   true
 ```
+
+> **Why not OpenEBS in sandbox?** OpenEBS pulls many images and spawns several pods — it frequently times out in resource-constrained Docker environments. `local-path` does the same job (hostpath volumes) with a single small pod and no timeout risk. OpenEBS is still used in production (script `04-install-storage.sh`).
 
 ### 5. Install KubeVirt (software emulation)
 
@@ -239,8 +232,8 @@ bash sandbox/deploy-ui.sh
 # Use Calico instead of Flannel
 CNI_PLUGIN=calico bash sandbox/bootstrap.sh
 
-# Use local-path instead of OpenEBS (lighter)
-STORAGE_PLUGIN=local-path bash sandbox/bootstrap.sh
+# Use OpenEBS instead of local-path (needs 12GB+ RAM, takes longer)
+STORAGE_PLUGIN=openebs bash sandbox/bootstrap.sh
 
 # Different KubeVirt version
 KUBEVIRT_VERSION=v1.1.0 bash sandbox/bootstrap.sh
@@ -281,6 +274,31 @@ virtcloud/
 ---
 
 ## 🔧 Troubleshooting
+
+### OpenEBS installation times out (`context deadline exceeded`)
+
+This happens when your machine doesn't have enough RAM or CPU for OpenEBS. The sandbox now uses `local-path` by default which avoids this entirely. If you already ran bootstrap with `STORAGE_PLUGIN=openebs`:
+
+```bash
+# Tear down and restart with the lightweight default
+bash sandbox/teardown.sh
+bash sandbox/bootstrap.sh   # uses local-path automatically now
+```
+
+Or manually install local-path on the existing cluster:
+
+```bash
+# Uninstall OpenEBS if partially installed
+helm uninstall openebs -n openebs 2>/dev/null || true
+
+# Install local-path instead
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
+kubectl wait --for=condition=Available deployment/local-path-provisioner \
+  -n local-path-storage --timeout=120s
+kubectl patch storageclass local-path \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+kubectl get storageclass
+```
 
 ### Nodes stuck in NotReady
 
