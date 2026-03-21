@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VirtCloud — VM Management Console</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Cabinet+Grotesk:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0e1117; --bg2:#161b27; --bg3:#1e2638; --bg4:#252f44;
+  --surface:#1a2235; --surface2:#202b40;
+  --border:rgba(255,255,255,0.07); --border2:rgba(255,255,255,0.14);
+  --blue:#3b82f6; --blue2:#60a5fa; --blue-dim:rgba(59,130,246,0.15);
+  --green:#22c55e; --green2:#4ade80; --green-dim:rgba(34,197,94,0.12);
+  --red:#ef4444; --red2:#f87171; --red-dim:rgba(239,68,68,0.12);
+  --amber:#f59e0b; --amber2:#fbbf24; --amber-dim:rgba(245,158,11,0.12);
+  --purple:#a855f7; --purple2:#c084fc; --purple-dim:rgba(168,85,247,0.12);
+  --cyan:#06b6d4; --cyan-dim:rgba(6,182,212,0.12);
+  --text:#f1f5f9; --text2:#94a3b8; --text3:#475569;
+  --sans:'Cabinet Grotesk',sans-serif;
+  --mono:'DM Mono',monospace;
+  --r:8px; --r2:12px; --r3:16px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:14px}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;display:flex;overflow:hidden}
+
+/* ── SIDEBAR ── */
+.sidebar{width:220px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;height:100vh;position:sticky;top:0}
+.sidebar-logo{padding:20px 18px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.logo-mark{width:30px;height:30px;background:linear-gradient(135deg,var(--blue),var(--purple));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.logo-text{font-size:15px;font-weight:800;letter-spacing:-0.3px}
+.logo-text span{color:var(--blue2)}
+.sidebar-nav{flex:1;padding:12px 10px;overflow-y:auto}
+.nav-section{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--text3);padding:14px 8px 6px;margin-top:4px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r);cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);transition:all 0.15s;margin-bottom:2px}
+.nav-item:hover{background:var(--bg3);color:var(--text)}
+.nav-item.active{background:var(--blue-dim);color:var(--blue2)}
+.nav-item .ni{font-size:16px;width:18px;text-align:center;flex-shrink:0}
+.nav-badge{margin-left:auto;background:var(--bg4);color:var(--text2);font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;min-width:22px;text-align:center}
+.nav-item.active .nav-badge{background:rgba(59,130,246,0.2);color:var(--blue2)}
+.sidebar-footer{padding:14px;border-top:1px solid var(--border)}
+.cluster-status{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--bg3);border-radius:var(--r);border:1px solid var(--border)}
+.cluster-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:glow 2s infinite}
+@keyframes glow{0%,100%{opacity:1}50%{opacity:0.5}}
+.cluster-info{flex:1;min-width:0}
+.cluster-name{font-size:12px;font-weight:600;color:var(--text)}
+.cluster-meta{font-size:10px;color:var(--text3);font-family:var(--mono)}
+
+/* ── MAIN ── */
+.main{flex:1;display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{height:56px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:16px;background:var(--bg2);flex-shrink:0}
+.topbar-title{font-size:16px;font-weight:700;flex:1}
+.topbar-actions{display:flex;align-items:center;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:var(--r);font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;border:1px solid transparent}
+.btn-primary{background:var(--blue);color:#fff;border-color:var(--blue)}
+.btn-primary:hover{background:#2563eb;box-shadow:0 4px 12px rgba(59,130,246,0.35)}
+.btn-outline{background:transparent;color:var(--text2);border-color:var(--border2)}
+.btn-outline:hover{background:var(--bg3);color:var(--text);border-color:var(--border2)}
+.btn-danger{background:var(--red-dim);color:var(--red2);border-color:rgba(239,68,68,0.25)}
+.btn-danger:hover{background:rgba(239,68,68,0.2)}
+.btn-success{background:var(--green-dim);color:var(--green2);border-color:rgba(34,197,94,0.25)}
+.btn-icon{padding:7px;width:34px;height:34px;justify-content:center}
+
+/* ── CONTENT ── */
+.content{flex:1;overflow-y:auto;padding:24px}
+
+/* ── STAT CARDS ── */
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:16px 18px;position:relative;overflow:hidden}
+.stat-card::after{content:'';position:absolute;top:0;right:0;width:60px;height:60px;border-radius:50%;opacity:0.07;transform:translate(20px,-20px)}
+.stat-card.blue::after{background:var(--blue)}
+.stat-card.green::after{background:var(--green)}
+.stat-card.amber::after{background:var(--amber)}
+.stat-card.purple::after{background:var(--purple)}
+.stat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.stat-value{font-size:28px;font-weight:800;line-height:1;margin-bottom:4px;letter-spacing:-0.5px}
+.stat-card.blue .stat-value{color:var(--blue2)}
+.stat-card.green .stat-value{color:var(--green2)}
+.stat-card.amber .stat-value{color:var(--amber2)}
+.stat-card.purple .stat-value{color:var(--purple2)}
+.stat-sub{font-size:11px;color:var(--text3)}
+
+/* ── VM TABLE ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.section-title{font-size:15px;font-weight:700}
+.section-actions{display:flex;gap:8px;align-items:center}
+.search-box{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 12px}
+.search-box input{background:none;border:none;outline:none;color:var(--text);font-family:var(--sans);font-size:13px;width:180px}
+.search-box input::placeholder{color:var(--text3)}
+
+.vm-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);overflow:hidden;margin-bottom:24px}
+.vm-table table{width:100%;border-collapse:collapse}
+.vm-table th{padding:11px 16px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);border-bottom:1px solid var(--border);background:var(--bg3)}
+.vm-table td{padding:13px 16px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.vm-table tr:last-child td{border-bottom:none}
+.vm-table tr:hover td{background:rgba(255,255,255,0.02)}
+
+.vm-name-cell{display:flex;align-items:center;gap:10px}
+.vm-icon{width:30px;height:30px;border-radius:var(--r);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.vm-icon.ubuntu{background:rgba(233,84,32,0.15)}
+.vm-icon.fedora{background:rgba(41,65,114,0.25)}
+.vm-icon.debian{background:rgba(215,10,83,0.15)}
+.vm-icon.rocky{background:rgba(16,185,129,0.15)}
+.vm-icon.alpine{background:rgba(14,165,233,0.15)}
+.vm-name{font-weight:600;color:var(--text)}
+.vm-ns{font-size:11px;color:var(--text3);font-family:var(--mono)}
+
+.status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.status-running{background:var(--green-dim);color:var(--green2);border:1px solid rgba(34,197,94,0.2)}
+.status-stopped{background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+.status-starting{background:var(--amber-dim);color:var(--amber2);border:1px solid rgba(245,158,11,0.2)}
+.status-error{background:var(--red-dim);color:var(--red2);border:1px solid rgba(239,68,68,0.2)}
+.status-migrating{background:var(--purple-dim);color:var(--purple2);border:1px solid rgba(168,85,247,0.2)}
+.status-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.status-running .status-dot{animation:glow 1.5s infinite}
+
+.resource-bar{height:4px;background:var(--bg4);border-radius:2px;overflow:hidden;width:80px;margin-top:3px}
+.resource-fill{height:100%;border-radius:2px}
+.fill-blue{background:var(--blue)}
+.fill-green{background:var(--green)}
+.fill-amber{background:var(--amber)}
+.fill-red{background:var(--red)}
+
+.actions-cell{display:flex;gap:6px;align-items:center}
+.icon-btn{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;font-size:13px;border:none;background:transparent;color:var(--text2)}
+.icon-btn:hover{background:var(--bg4);color:var(--text)}
+.icon-btn.start:hover{color:var(--green2);background:var(--green-dim)}
+.icon-btn.stop:hover{color:var(--red2);background:var(--red-dim)}
+.icon-btn.console:hover{color:var(--cyan);background:var(--cyan-dim)}
+.icon-btn.migrate:hover{color:var(--purple2);background:var(--purple-dim)}
+.icon-btn.delete:hover{color:var(--red2);background:var(--red-dim)}
+
+/* ── NODE CARDS ── */
+.nodes-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px}
+.node-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:16px}
+.node-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.node-name-wrap{display:flex;align-items:center;gap:8px}
+.node-role-badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600}
+.role-cp{background:var(--blue-dim);color:var(--blue2);border:1px solid rgba(59,130,246,0.2)}
+.role-worker{background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+.node-name{font-size:13px;font-weight:700}
+.node-ip{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:1px}
+.resource-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.res-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px}
+.res-value{font-size:12px;font-weight:600;font-family:var(--mono);color:var(--text2)}
+.res-bar-full{height:5px;background:var(--bg4);border-radius:3px;overflow:hidden;margin-bottom:12px}
+.res-bar-fill{height:100%;border-radius:3px;transition:width 1s ease}
+.node-vms{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+.vm-chip{font-size:10px;padding:2px 7px;background:var(--bg4);border:1px solid var(--border);border-radius:4px;color:var(--text3);font-family:var(--mono)}
+
+/* ── MODAL ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:100;display:flex;align-items:center;justify-content:center;padding:24px;opacity:0;pointer-events:none;transition:opacity 0.2s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r3);width:100%;max-width:560px;max-height:90vh;overflow-y:auto;animation:slideup 0.2s ease}
+@keyframes slideup{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+.modal-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-size:16px;font-weight:700}
+.modal-body{padding:20px 24px}
+.modal-footer{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+.close-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;line-height:1;padding:2px}
+.close-btn:hover{color:var(--text)}
+
+/* ── FORM ── */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-group{display:flex;flex-direction:column;gap:6px}
+.form-group.full{grid-column:1/-1}
+label{font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px}
+input[type=text],input[type=number],select,textarea{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r);padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;width:100%;transition:border-color 0.15s}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+select{cursor:pointer}
+input::placeholder,textarea::placeholder{color:var(--text3)}
+.os-picker{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.os-tile{padding:10px 6px;border:1px solid var(--border);border-radius:var(--r);cursor:pointer;text-align:center;transition:all 0.15s}
+.os-tile:hover{border-color:var(--border2);background:var(--bg3)}
+.os-tile.selected{border-color:var(--blue);background:var(--blue-dim)}
+.os-tile-icon{font-size:20px;margin-bottom:4px}
+.os-tile-name{font-size:10px;color:var(--text2);font-weight:600}
+
+/* ── CONSOLE ── */
+.console-panel{background:#000;border-radius:var(--r);padding:14px;font-family:var(--mono);font-size:12px;color:#e2e8f0;height:240px;overflow-y:auto;border:1px solid var(--border)}
+.console-line{line-height:1.8;white-space:pre-wrap}
+.console-line.ok{color:#4ade80}
+.console-line.err{color:#f87171}
+.console-line.info{color:#60a5fa}
+.console-line.prompt{color:#fbbf24}
+.console-input-row{display:flex;align-items:center;gap:8px;margin-top:10px}
+.console-input-row input{background:#111;border:1px solid #333;border-radius:4px;padding:6px 10px;color:#e2e8f0;font-family:var(--mono);font-size:12px;flex:1;outline:none}
+
+/* ── TABS ── */
+.tabs{display:flex;gap:2px;background:var(--bg3);border-radius:var(--r);padding:3px;width:fit-content;margin-bottom:20px}
+.tab{padding:6px 16px;border-radius:6px;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;transition:all 0.15s}
+.tab.active{background:var(--surface2);color:var(--text)}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+
+/* ── TOAST ── */
+.toast-container{position:fixed;top:16px;right:16px;z-index:200;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r2);padding:12px 16px;font-size:13px;display:flex;align-items:center;gap:10px;min-width:260px;animation:slideup 0.2s ease;box-shadow:0 8px 24px rgba(0,0,0,0.4)}
+.toast.success{border-left:3px solid var(--green)}
+.toast.error{border-left:3px solid var(--red)}
+.toast.info{border-left:3px solid var(--blue)}
+
+/* ── MISC ── */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;font-family:var(--mono);background:var(--bg4);color:var(--text2);border:1px solid var(--border)}
+.divider{height:1px;background:var(--border);margin:16px 0}
+.empty-state{text-align:center;padding:40px;color:var(--text3)}
+.empty-state .empty-icon{font-size:40px;margin-bottom:12px;opacity:0.4}
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark">⚡</div>
+    <div class="logo-text">Virt<span>Cloud</span></div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section">Compute</div>
+    <div class="nav-item active" onclick="showView('vms')">
+      <span class="ni">🖥️</span> Virtual Machines
+      <span class="nav-badge" id="vm-count">5</span>
+    </div>
+    <div class="nav-item" onclick="showView('nodes')">
+      <span class="ni">🔧</span> Nodes
+      <span class="nav-badge">3</span>
+    </div>
+    <div class="nav-item" onclick="showView('templates')">
+      <span class="ni">📋</span> Templates
+      <span class="nav-badge">4</span>
+    </div>
+
+    <div class="nav-section">Storage</div>
+    <div class="nav-item" onclick="showView('volumes')">
+      <span class="ni">💾</span> Volumes
+      <span class="nav-badge" id="vol-count">7</span>
+    </div>
+    <div class="nav-item" onclick="showView('snapshots')">
+      <span class="ni">📸</span> Snapshots
+      <span class="nav-badge">2</span>
+    </div>
+
+    <div class="nav-section">Network</div>
+    <div class="nav-item" onclick="showView('networks')">
+      <span class="ni">🌐</span> Networks
+      <span class="nav-badge">3</span>
+    </div>
+
+    <div class="nav-section">Cluster</div>
+    <div class="nav-item" onclick="showView('monitoring')">
+      <span class="ni">📊</span> Monitoring
+    </div>
+    <div class="nav-item" onclick="showView('events')">
+      <span class="ni">📋</span> Events
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="cluster-status">
+      <div class="cluster-dot"></div>
+      <div class="cluster-info">
+        <div class="cluster-name">virtcloud</div>
+        <div class="cluster-meta">3 nodes · healthy</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ── MAIN ── -->
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-title" id="page-title">Virtual Machines</div>
+    <div class="topbar-actions">
+      <button class="btn btn-outline" onclick="showConsoleModal()">⌨ kubectl</button>
+      <button class="btn btn-primary" onclick="showCreateVM()">＋ Create VM</button>
+    </div>
+  </header>
+
+  <div class="content" id="content-area">
+    <!-- VMs View (default) -->
+    <div id="view-vms">
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card blue">
+          <div class="stat-label">🖥️ Total VMs</div>
+          <div class="stat-value">5</div>
+          <div class="stat-sub">3 running · 2 stopped</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-label">✅ Running</div>
+          <div class="stat-value">3</div>
+          <div class="stat-sub">All healthy</div>
+        </div>
+        <div class="stat-card amber">
+          <div class="stat-label">⚡ vCPUs Allocated</div>
+          <div class="stat-value">14</div>
+          <div class="stat-sub">of 48 total</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-label">💾 Memory Allocated</div>
+          <div class="stat-value">28G</div>
+          <div class="stat-sub">of 96G total</div>
+        </div>
+      </div>
+
+      <!-- VM Table -->
+      <div class="section-header">
+        <div class="section-title">Virtual Machines</div>
+        <div class="section-actions">
+          <div class="search-box">
+            <span style="color:var(--text3)">🔍</span>
+            <input type="text" placeholder="Search VMs..." id="vm-search" oninput="filterVMs(this.value)">
+          </div>
+          <button class="btn btn-outline btn-icon" onclick="refreshVMs()" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div class="vm-table" id="vm-table-wrap">
+        <table id="vm-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Node</th>
+              <th>CPU</th>
+              <th>Memory</th>
+              <th>IP Address</th>
+              <th>OS</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="vm-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Nodes View -->
+    <div id="view-nodes" style="display:none">
+      <div class="stats-row">
+        <div class="stat-card green">
+          <div class="stat-label">🔧 Total Nodes</div>
+          <div class="stat-value">3</div>
+          <div class="stat-sub">1 control-plane · 2 workers</div>
+        </div>
+        <div class="stat-card blue">
+          <div class="stat-label">💻 Total vCPUs</div>
+          <div class="stat-value">48</div>
+          <div class="stat-sub">16 per node</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-label">🧠 Total Memory</div>
+          <div class="stat-value">96G</div>
+          <div class="stat-sub">32G per node</div>
+        </div>
+        <div class="stat-card amber">
+          <div class="stat-label">💾 Total Storage</div>
+          <div class="stat-value">3T</div>
+          <div class="stat-sub">OpenEBS hostpath</div>
+        </div>
+      </div>
+      <div id="nodes-grid" class="nodes-grid"></div>
+    </div>
+
+    <!-- Templates View -->
+    <div id="view-templates" style="display:none">
+      <div class="section-header">
+        <div class="section-title">VM Templates</div>
+        <button class="btn btn-primary" onclick="showCreateVM()">＋ Create VM from Template</button>
+      </div>
+      <div id="templates-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px"></div>
+    </div>
+
+    <!-- Volumes View -->
+    <div id="view-volumes" style="display:none">
+      <div class="section-header">
+        <div class="section-title">Persistent Volumes</div>
+      </div>
+      <div class="vm-table">
+        <table>
+          <thead><tr><th>Name</th><th>Namespace</th><th>Size</th><th>Storage Class</th><th>Status</th><th>Bound To</th></tr></thead>
+          <tbody id="volumes-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Networks View -->
+    <div id="view-networks" style="display:none">
+      <div class="section-header">
+        <div class="section-title">Networks</div>
+      </div>
+      <div id="networks-grid" style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px"></div>
+    </div>
+
+    <!-- Monitoring View -->
+    <div id="view-monitoring" style="display:none">
+      <div class="section-header"><div class="section-title">Cluster Monitoring</div></div>
+      <div id="monitoring-content"></div>
+    </div>
+
+    <!-- Events View -->
+    <div id="view-events" style="display:none">
+      <div class="section-header"><div class="section-title">Recent Events</div></div>
+      <div id="events-list"></div>
+    </div>
+
+    <!-- Snapshots View -->
+    <div id="view-snapshots" style="display:none">
+      <div class="section-header"><div class="section-title">VM Snapshots</div></div>
+      <div class="vm-table"><table><thead><tr><th>Name</th><th>VM</th><th>Created</th><th>Size</th><th>Actions</th></tr></thead><tbody id="snapshots-tbody"></tbody></table></div>
+    </div>
+  </div>
+</main>
+
+<!-- ── TOAST CONTAINER ── -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ── CREATE VM MODAL ── -->
+<div class="modal-overlay" id="create-vm-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Create Virtual Machine</div>
+      <button class="close-btn" onclick="closeModal('create-vm-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="margin-bottom:16px">
+        <label style="display:block;margin-bottom:8px">Operating System</label>
+        <div class="os-picker" id="os-picker">
+          <div class="os-tile selected" data-os="ubuntu" onclick="selectOS(this)">
+            <div class="os-tile-icon">🐧</div>
+            <div class="os-tile-name">Ubuntu 24.04</div>
+          </div>
+          <div class="os-tile" data-os="fedora" onclick="selectOS(this)">
+            <div class="os-tile-icon">🎩</div>
+            <div class="os-tile-name">Fedora 39</div>
+          </div>
+          <div class="os-tile" data-os="debian" onclick="selectOS(this)">
+            <div class="os-tile-icon">🌀</div>
+            <div class="os-tile-name">Debian 12</div>
+          </div>
+          <div class="os-tile" data-os="rocky" onclick="selectOS(this)">
+            <div class="os-tile-icon">💎</div>
+            <div class="os-tile-name">Rocky 9</div>
+          </div>
+          <div class="os-tile" data-os="alpine" onclick="selectOS(this)">
+            <div class="os-tile-icon">🏔️</div>
+            <div class="os-tile-name">Alpine 3.19</div>
+          </div>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>VM Name</label>
+          <input type="text" id="vm-name" placeholder="ubuntu-vm-01" value="ubuntu-vm-01">
+        </div>
+        <div class="form-group">
+          <label>Namespace</label>
+          <select id="vm-ns">
+            <option value="vms">vms</option>
+            <option value="default">default</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>vCPU Cores</label>
+          <input type="number" id="vm-cpu" value="2" min="1" max="32">
+        </div>
+        <div class="form-group">
+          <label>Memory</label>
+          <select id="vm-mem">
+            <option value="512Mi">512 MB</option>
+            <option value="1Gi">1 GB</option>
+            <option value="2Gi">2 GB</option>
+            <option value="4Gi" selected>4 GB</option>
+            <option value="8Gi">8 GB</option>
+            <option value="16Gi">16 GB</option>
+            <option value="32Gi">32 GB</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Disk Size</label>
+          <select id="vm-disk">
+            <option value="10Gi">10 GB</option>
+            <option value="20Gi" selected>20 GB</option>
+            <option value="50Gi">50 GB</option>
+            <option value="100Gi">100 GB</option>
+            <option value="200Gi">200 GB</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Storage Class</label>
+          <select id="vm-sc">
+            <option value="openebs-hostpath">openebs-hostpath</option>
+            <option value="openebs-lvm">openebs-lvm</option>
+            <option value="longhorn">longhorn</option>
+            <option value="rook-ceph-block">rook-ceph-block</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label>SSH Public Key</label>
+          <textarea id="vm-ssh-key" rows="3" placeholder="ssh-rsa AAAA... user@host"></textarea>
+        </div>
+        <div class="form-group full">
+          <label>Node Selector (optional)</label>
+          <input type="text" id="vm-node" placeholder="Leave empty for auto-scheduling">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div style="background:var(--bg3);border-radius:var(--r);padding:12px;margin-top:0">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:8px">Generated kubectl command</div>
+        <code id="kubectl-preview" style="font-family:var(--mono);font-size:11px;color:var(--cyan);display:block;word-break:break-all;line-height:1.6"></code>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('create-vm-modal')">Cancel</button>
+      <button class="btn btn-outline" onclick="generateYAML()">📄 Export YAML</button>
+      <button class="btn btn-primary" onclick="createVM()">⚡ Create VM</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONSOLE MODAL ── -->
+<div class="modal-overlay" id="console-modal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <div class="modal-title">⌨ kubectl Console</div>
+      <button class="close-btn" onclick="closeModal('console-modal')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="console-panel" id="console-output">
+        <div class="console-line info">VirtCloud kubectl console — connected to cluster: virtcloud</div>
+        <div class="console-line info">Type kubectl commands below. Prefix with 'kubectl' or just the subcommand.</div>
+        <div class="console-line ok">✓ Cluster: 3 nodes ready</div>
+        <div class="console-line prompt">virtcloud $ </div>
+      </div>
+      <div class="console-input-row">
+        <span style="font-family:var(--mono);font-size:12px;color:var(--amber2)">$ </span>
+        <input type="text" id="console-input" placeholder="get vms -n vms" onkeydown="handleConsoleInput(event)">
+        <button class="btn btn-primary" style="padding:6px 14px;font-size:12px" onclick="runConsoleCmd()">Run</button>
+      </div>
+      <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;font-family:var(--mono)" onclick="quickCmd('get vms -n vms')">get vms</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;font-family:var(--mono)" onclick="quickCmd('get nodes -o wide')">get nodes</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;font-family:var(--mono)" onclick="quickCmd('get pvc -n vms')">get pvc</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;font-family:var(--mono)" onclick="quickCmd('get sc')">get sc</button>
+        <button class="btn btn-outline" style="font-size:11px;padding:4px 10px;font-family:var(--mono)" onclick="quickCmd('get all -n kubevirt')">kubevirt</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="clearConsole()">Clear</button>
+      <button class="btn btn-outline" onclick="closeModal('console-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── VM DETAIL MODAL ── -->
+<div class="modal-overlay" id="vm-detail-modal">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header">
+      <div class="modal-title" id="detail-vm-name">VM Details</div>
+      <button class="close-btn" onclick="closeModal('vm-detail-modal')">✕</button>
+    </div>
+    <div class="modal-body" id="detail-modal-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('vm-detail-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA MODEL ────────────────────────────────────────────────────────────────
+const VMs = [
+  { id:1, name:'ubuntu-vm-01', ns:'vms', status:'running', node:'worker-01', cpu:2, mem:4, memUsed:2.1, cpuUsed:34, ip:'172.20.0.51', os:'ubuntu', osName:'Ubuntu 24.04', disk:'20Gi', sc:'openebs-hostpath', age:'2d', uptime:'47h' },
+  { id:2, name:'ubuntu-vm-02', ns:'vms', status:'running', node:'worker-02', cpu:4, mem:8, memUsed:5.3, cpuUsed:61, ip:'172.20.0.52', os:'ubuntu', osName:'Ubuntu 24.04', disk:'50Gi', sc:'openebs-hostpath', age:'5h', uptime:'5h' },
+  { id:3, name:'fedora-vm-01', ns:'vms', status:'stopped', node:'—', cpu:2, mem:4, memUsed:0, cpuUsed:0, ip:'—', os:'fedora', osName:'Fedora 39', disk:'20Gi', sc:'openebs-hostpath', age:'1d', uptime:'—' },
+  { id:4, name:'rocky-vm-01',  ns:'vms', status:'running', node:'worker-01', cpu:4, mem:8, memUsed:3.8, cpuUsed:28, ip:'172.20.0.54', os:'rocky', osName:'Rocky Linux 9', disk:'50Gi', sc:'openebs-lvm', age:'3d', uptime:'71h' },
+  { id:5, name:'debian-vm-01', ns:'vms', status:'stopped', node:'—', cpu:2, mem:2, memUsed:0, cpuUsed:0, ip:'—', os:'debian', osName:'Debian 12', disk:'20Gi', sc:'openebs-hostpath', age:'12h', uptime:'—' },
+];
+
+const Nodes = [
+  { name:'control-plane-01', ip:'192.168.1.10', role:'control-plane', cpu:16, mem:32, cpuUsed:18, memUsed:6.2, status:'ready', vms:[], k8sVer:'v1.30.0', os:'Ubuntu 24.04' },
+  { name:'worker-01',        ip:'192.168.1.11', role:'worker',        cpu:16, mem:32, cpuUsed:62, memUsed:16.8, status:'ready', vms:['ubuntu-vm-01','rocky-vm-01'], k8sVer:'v1.30.0', os:'Ubuntu 24.04' },
+  { name:'worker-02',        ip:'192.168.1.12', role:'worker',        cpu:16, mem:32, cpuUsed:47, memUsed:12.3, status:'ready', vms:['ubuntu-vm-02'], k8sVer:'v1.30.0', os:'Ubuntu 24.04' },
+];
+
+const Volumes = [
+  { name:'ubuntu-vm-01-boot', ns:'vms', size:'20Gi', sc:'openebs-hostpath', status:'Bound', vm:'ubuntu-vm-01' },
+  { name:'ubuntu-vm-02-boot', ns:'vms', size:'50Gi', sc:'openebs-hostpath', status:'Bound', vm:'ubuntu-vm-02' },
+  { name:'fedora-vm-01-boot', ns:'vms', size:'20Gi', sc:'openebs-hostpath', status:'Bound', vm:'fedora-vm-01' },
+  { name:'rocky-vm-01-boot',  ns:'vms', size:'50Gi', sc:'openebs-lvm',      status:'Bound', vm:'rocky-vm-01' },
+  { name:'debian-vm-01-boot', ns:'vms', size:'20Gi', sc:'openebs-hostpath', status:'Bound', vm:'debian-vm-01' },
+  { name:'data-vol-01',       ns:'vms', size:'100Gi', sc:'openebs-lvm',     status:'Available', vm:'—' },
+  { name:'backup-vol-01',     ns:'vms', size:'200Gi', sc:'openebs-hostpath', status:'Available', vm:'—' },
+];
+
+const Networks = [
+  { name:'pod-network',   type:'KubeOVN', cidr:'10.244.0.0/16', gateway:'10.244.0.1', vms:5, status:'active' },
+  { name:'vm-subnet',     type:'KubeOVN Subnet', cidr:'172.20.0.0/24', gateway:'172.20.0.1', vms:3, status:'active' },
+  { name:'external-flat', type:'Provider Network', cidr:'192.168.1.0/24', gateway:'192.168.1.1', vms:0, status:'inactive' },
+];
+
+const Events = [
+  { time:'2m ago',  type:'Normal',  reason:'Started',   obj:'ubuntu-vm-01', msg:'VM started successfully' },
+  { time:'5m ago',  type:'Normal',  reason:'Scheduled', obj:'ubuntu-vm-02', msg:'VM scheduled on worker-02' },
+  { time:'12m ago', type:'Warning', reason:'Pulling',   obj:'ubuntu-vm-02', msg:'Pulling disk image from ubuntu cloud-images' },
+  { time:'1h ago',  type:'Normal',  reason:'Snapshot',  obj:'rocky-vm-01',  msg:'Snapshot taken: rocky-snap-01' },
+  { time:'3h ago',  type:'Normal',  reason:'Migrated',  obj:'ubuntu-vm-01', msg:'VM live-migrated from worker-02 to worker-01' },
+];
+
+const OsIcons = { ubuntu:'🐧', fedora:'🎩', debian:'🌀', rocky:'💎', alpine:'🏔️', windows:'🪟' };
+const osURLs = {
+  ubuntu:  'https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img',
+  fedora:  'https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2',
+  debian:  'https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2',
+  rocky:   'https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2',
+  alpine:  'https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/cloud/nocloud_alpine-3.19.0-x86_64-bios-cloudinit-r0.qcow2',
+};
+
+let selectedOS = 'ubuntu';
+
+// ── RENDER VM TABLE ────────────────────────────────────────────────────────────
+function renderVMs(list) {
+  const tb = document.getElementById('vm-tbody');
+  if (!list.length) { tb.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🖥️</div>No VMs found</div></td></tr>`; return; }
+  tb.innerHTML = list.map(vm => {
+    const sc = vm.status;
+    const badge = `<span class="status-badge status-${sc}"><span class="status-dot"></span>${sc}</span>`;
+    const cpuPct = vm.cpuUsed;
+    const memPct = Math.round((vm.memUsed/vm.mem)*100);
+    const cpuColor = cpuPct>80?'fill-red':cpuPct>60?'fill-amber':'fill-blue';
+    const memColor = memPct>80?'fill-red':memPct>60?'fill-amber':'fill-green';
+    return `<tr>
+      <td>
+        <div class="vm-name-cell">
+          <div class="vm-icon ${vm.os}">${OsIcons[vm.os]||'💻'}</div>
+          <div>
+            <div class="vm-name" style="cursor:pointer" onclick="showVMDetail(${vm.id})">${vm.name}</div>
+            <div class="vm-ns">${vm.ns}</div>
+          </div>
+        </div>
+      </td>
+      <td>${badge}</td>
+      <td><span class="chip">${vm.node}</span></td>
+      <td>
+        <div style="font-size:12px;font-family:var(--mono);margin-bottom:3px">${vm.cpuUsed}% / ${vm.cpu}c</div>
+        <div class="resource-bar"><div class="resource-fill ${cpuColor}" style="width:${cpuPct}%"></div></div>
+      </td>
+      <td>
+        <div style="font-size:12px;font-family:var(--mono);margin-bottom:3px">${vm.memUsed}/${vm.mem}Gi</div>
+        <div class="resource-bar"><div class="resource-fill ${memColor}" style="width:${memPct}%"></div></div>
+      </td>
+      <td><code style="font-family:var(--mono);font-size:11px;color:var(--cyan)">${vm.ip}</code></td>
+      <td><span style="font-size:12px;color:var(--text2)">${vm.osName}</span></td>
+      <td>
+        <div class="actions-cell">
+          ${sc==='stopped'?`<button class="icon-btn start" onclick="vmAction(${vm.id},'start')" title="Start">▶</button>`:`<button class="icon-btn stop" onclick="vmAction(${vm.id},'stop')" title="Stop">⏹</button>`}
+          <button class="icon-btn console" onclick="vmAction(${vm.id},'console')" title="Console">⌨</button>
+          <button class="icon-btn migrate" onclick="vmAction(${vm.id},'migrate')" title="Live Migrate" ${sc!=='running'?'disabled style="opacity:0.3"':''}>⇄</button>
+          <button class="icon-btn" onclick="vmAction(${vm.id},'snapshot')" title="Snapshot">📸</button>
+          <button class="icon-btn delete" onclick="vmAction(${vm.id},'delete')" title="Delete">🗑</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterVMs(q) {
+  const filtered = VMs.filter(vm => vm.name.includes(q) || vm.ns.includes(q) || vm.os.includes(q) || vm.node.includes(q));
+  renderVMs(filtered);
+}
+
+function refreshVMs() {
+  toast('Refreshed VM list', 'success');
+  renderVMs(VMs);
+}
+
+// ── RENDER NODES ──────────────────────────────────────────────────────────────
+function renderNodes() {
+  document.getElementById('nodes-grid').innerHTML = Nodes.map(n => {
+    const cpuPct = n.cpuUsed; const memPct = Math.round((n.memUsed/n.mem)*100);
+    const cpuColor = cpuPct>80?'fill-red':cpuPct>60?'fill-amber':'fill-blue';
+    const memColor = memPct>80?'fill-red':memPct>60?'fill-amber':'fill-green';
+    return `<div class="node-card">
+      <div class="node-header">
+        <div class="node-name-wrap">
+          <div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div class="node-name">${n.name}</div>
+              <span class="node-role-badge ${n.role==='control-plane'?'role-cp':'role-worker'}">${n.role}</span>
+            </div>
+            <div class="node-ip">${n.ip}</div>
+          </div>
+        </div>
+        <span class="status-badge status-running"><span class="status-dot"></span>Ready</span>
+      </div>
+      <div class="resource-row"><span class="res-label">CPU</span><span class="res-value">${n.cpuUsed}% / ${n.cpu} cores</span></div>
+      <div class="res-bar-full"><div class="res-bar-fill ${cpuColor}" style="width:${n.cpuUsed}%"></div></div>
+      <div class="resource-row"><span class="res-label">Memory</span><span class="res-value">${n.memUsed}/${n.mem}Gi</span></div>
+      <div class="res-bar-full"><div class="res-bar-fill ${memColor}" style="width:${memPct}%"></div></div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">VMs on this node</div>
+      <div class="node-vms">
+        ${n.vms.length ? n.vms.map(v=>`<span class="vm-chip">${v}</span>`).join('') : '<span style="font-size:11px;color:var(--text3)">No VMs</span>'}
+      </div>
+      <div class="divider" style="margin:12px 0 8px"></div>
+      <div style="display:flex;justify-content:space-between">
+        <span style="font-size:10px;color:var(--text3);font-family:var(--mono)">${n.k8sVer}</span>
+        <span style="font-size:10px;color:var(--text3)">${n.os}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RENDER TEMPLATES ──────────────────────────────────────────────────────────
+function renderTemplates() {
+  const templates = [
+    { os:'ubuntu', name:'Ubuntu 24.04 LTS', cpu:2, mem:'4Gi', disk:'20Gi', desc:'Latest Ubuntu LTS with cloud-init, qemu-guest-agent' },
+    { os:'fedora', name:'Fedora 39',         cpu:2, mem:'4Gi', disk:'20Gi', desc:'Fedora Server with KVM-optimized kernel' },
+    { os:'rocky',  name:'Rocky Linux 9',     cpu:2, mem:'4Gi', disk:'20Gi', desc:'RHEL-compatible enterprise Linux distribution' },
+    { os:'debian', name:'Debian 12 Bookworm',cpu:2, mem:'2Gi', disk:'20Gi', desc:'Stable Debian release with minimal footprint' },
+    { os:'alpine', name:'Alpine 3.19',        cpu:1, mem:'512Mi',disk:'5Gi',  desc:'Ultra-lightweight Alpine Linux (512MB RAM)' },
+  ];
+  document.getElementById('templates-grid').innerHTML = templates.map(t => `
+    <div class="node-card" style="cursor:pointer" onclick="showCreateVM('${t.os}')">
+      <div style="font-size:28px;margin-bottom:10px">${OsIcons[t.os]}</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px">${t.name}</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">${t.desc}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <span class="chip">💻 ${t.cpu} vCPU</span>
+        <span class="chip">🧠 ${t.mem}</span>
+        <span class="chip">💾 ${t.disk}</span>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-top:14px;font-size:12px">Deploy →</button>
+    </div>
+  `).join('');
+}
+
+// ── RENDER VOLUMES ────────────────────────────────────────────────────────────
+function renderVolumes() {
+  document.getElementById('volumes-tbody').innerHTML = Volumes.map(v => `
+    <tr>
+      <td><code style="font-family:var(--mono);font-size:12px">${v.name}</code></td>
+      <td><span class="chip">${v.ns}</span></td>
+      <td><span style="font-family:var(--mono);font-size:12px">${v.size}</span></td>
+      <td><span class="chip">${v.sc}</span></td>
+      <td><span class="status-badge ${v.status==='Bound'?'status-running':'status-stopped'}">${v.status}</span></td>
+      <td><span style="font-size:12px;color:var(--text2)">${v.vm}</span></td>
+    </tr>
+  `).join('');
+}
+
+// ── RENDER NETWORKS ───────────────────────────────────────────────────────────
+function renderNetworks() {
+  document.getElementById('networks-grid').innerHTML = Networks.map(n => `
+    <div class="node-card">
+      <div class="node-header">
+        <div>
+          <div class="node-name">${n.name}</div>
+          <div class="node-ip">${n.type}</div>
+        </div>
+        <span class="status-badge ${n.status==='active'?'status-running':'status-stopped'}">${n.status}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">CIDR</div><code style="font-family:var(--mono);font-size:12px;color:var(--cyan)">${n.cidr}</code></div>
+        <div><div style="font-size:10px;color:var(--text3);margin-bottom:3px">Gateway</div><code style="font-family:var(--mono);font-size:12px">${n.gateway}</code></div>
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;color:var(--text3)">${n.vms} VM(s) connected</div>
+    </div>
+  `).join('');
+}
+
+// ── RENDER EVENTS ─────────────────────────────────────────────────────────────
+function renderEvents() {
+  document.getElementById('events-list').innerHTML = Events.map(e => `
+    <div style="display:flex;gap:14px;align-items:flex-start;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px">
+      <span style="font-size:18px">${e.type==='Warning'?'⚠️':'✅'}</span>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;margin-bottom:2px">${e.msg}</div>
+        <div style="display:flex;gap:10px;font-size:11px;color:var(--text3)">
+          <span>${e.time}</span>
+          <span class="chip">${e.reason}</span>
+          <span style="font-family:var(--mono)">${e.obj}</span>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── RENDER MONITORING ─────────────────────────────────────────────────────────
+function renderMonitoring() {
+  document.getElementById('monitoring-content').innerHTML = `
+    <div class="stats-row" style="margin-bottom:20px">
+      <div class="stat-card blue"><div class="stat-label">Cluster CPU</div><div class="stat-value">42%</div><div class="stat-sub">20.2 / 48 cores</div></div>
+      <div class="stat-card purple"><div class="stat-label">Cluster Memory</div><div class="stat-value">36%</div><div class="stat-sub">34.8 / 96 GiB</div></div>
+      <div class="stat-card amber"><div class="stat-label">Storage Used</div><div class="stat-value">18%</div><div class="stat-sub">540 / 3000 GiB</div></div>
+      <div class="stat-card green"><div class="stat-label">Network I/O</div><div class="stat-value">1.2G</div><div class="stat-sub">↑ 340M ↓ 860M today</div></div>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r2);padding:20px">
+      <div style="font-weight:700;margin-bottom:14px">Node Resource Utilization</div>
+      ${Nodes.map(n=>`
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+            <span style="font-weight:600">${n.name}</span>
+            <span style="color:var(--text3)">CPU: ${n.cpuUsed}% · MEM: ${Math.round((n.memUsed/n.mem)*100)}%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <div style="font-size:10px;color:var(--text3);margin-bottom:3px">CPU</div>
+              <div class="res-bar-full" style="height:8px"><div class="res-bar-fill ${n.cpuUsed>80?'fill-red':n.cpuUsed>60?'fill-amber':'fill-blue'}" style="width:${n.cpuUsed}%"></div></div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Memory</div>
+              <div class="res-bar-full" style="height:8px"><div class="res-bar-fill ${Math.round((n.memUsed/n.mem)*100)>80?'fill-red':'fill-green'}" style="width:${Math.round((n.memUsed/n.mem)*100)}%"></div></div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
+// ── RENDER SNAPSHOTS ──────────────────────────────────────────────────────────
+function renderSnapshots() {
+  const snaps = [
+    { name:'ubuntu-snap-01', vm:'ubuntu-vm-01', created:'2024-03-19 14:30', size:'4.2Gi' },
+    { name:'rocky-snap-01',  vm:'rocky-vm-01',  created:'2024-03-20 09:15', size:'8.7Gi' },
+  ];
+  document.getElementById('snapshots-tbody').innerHTML = snaps.map(s=>`
+    <tr>
+      <td><code style="font-family:var(--mono);font-size:12px">${s.name}</code></td>
+      <td><span class="chip">${s.vm}</span></td>
+      <td><span style="font-size:12px;color:var(--text2)">${s.created}</span></td>
+      <td><span style="font-family:var(--mono);font-size:12px">${s.size}</span></td>
+      <td>
+        <div class="actions-cell">
+          <button class="icon-btn start" title="Restore" onclick="toast('Snapshot restore initiated','info')">↩</button>
+          <button class="icon-btn delete" title="Delete" onclick="toast('Snapshot deleted','success')">🗑</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ── VIEW SWITCHING ────────────────────────────────────────────────────────────
+const viewTitles = { vms:'Virtual Machines', nodes:'Nodes', templates:'VM Templates', volumes:'Volumes', snapshots:'Snapshots', networks:'Networks', monitoring:'Monitoring', events:'Events' };
+
+function showView(name) {
+  document.querySelectorAll('[id^="view-"]').forEach(v=>v.style.display='none');
+  document.getElementById('view-'+name).style.display='block';
+  document.querySelectorAll('.nav-item').forEach(i=>i.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('page-title').textContent = viewTitles[name]||name;
+
+  if(name==='nodes')       renderNodes();
+  if(name==='templates')   renderTemplates();
+  if(name==='volumes')     renderVolumes();
+  if(name==='networks')    renderNetworks();
+  if(name==='events')      renderEvents();
+  if(name==='monitoring')  renderMonitoring();
+  if(name==='snapshots')   renderSnapshots();
+}
+
+// ── VM ACTIONS ────────────────────────────────────────────────────────────────
+function vmAction(id, action) {
+  const vm = VMs.find(v=>v.id===id);
+  if(!vm) return;
+  const msgs = {
+    start:    ['Starting VM...','success', ()=>{ vm.status='running'; vm.node='worker-01'; vm.ip='172.20.0.5'+id; renderVMs(VMs); }],
+    stop:     ['Stopping VM...','info',    ()=>{ vm.status='stopped'; vm.node='—'; vm.ip='—'; vm.cpuUsed=0; vm.memUsed=0; renderVMs(VMs); }],
+    console:  [`Opening console for ${vm.name}`,'info', ()=>showConsoleModal()],
+    migrate:  [`Live migrating ${vm.name}...`,'info', ()=>{ toast(`${vm.name} migrated successfully`,'success'); }],
+    snapshot: [`Snapshot created for ${vm.name}`,'success', null],
+    delete:   [`VM ${vm.name} deleted`,'error',    ()=>{ VMs.splice(VMs.indexOf(vm),1); document.getElementById('vm-count').textContent=VMs.length; renderVMs(VMs); }],
+  };
+  const [msg, type, cb] = msgs[action]||['Done','info',null];
+  toast(msg, type);
+  if(cb) setTimeout(cb, 800);
+}
+
+// ── VM DETAIL ─────────────────────────────────────────────────────────────────
+function showVMDetail(id) {
+  const vm = VMs.find(v=>v.id===id);
+  document.getElementById('detail-vm-name').textContent = `${OsIcons[vm.os]} ${vm.name}`;
+  document.getElementById('detail-modal-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      ${[['Status',`<span class="status-badge status-${vm.status}"><span class="status-dot"></span>${vm.status}</span>`],
+         ['Node',`<span class="chip">${vm.node}</span>`],
+         ['IP Address',`<code style="font-family:var(--mono);font-size:13px;color:var(--cyan)">${vm.ip}</code>`],
+         ['OS',vm.osName],['vCPUs',`${vm.cpu} cores`],['Memory',`${vm.mem} GiB`],
+         ['Disk',vm.disk],['Storage Class',`<span class="chip">${vm.sc}</span>`],
+         ['Age',vm.age],['Uptime',vm.uptime],
+        ].map(([k,v])=>`<div style="background:var(--bg3);border-radius:var(--r);padding:10px 12px"><div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${k}</div><div style="font-size:13px">${v}</div></div>`).join('')}
+    </div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Quick Actions</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${vm.status==='running'
+          ? `<button class="btn btn-danger" onclick="vmAction(${vm.id},'stop');closeModal('vm-detail-modal')">⏹ Stop</button>`
+          : `<button class="btn btn-success" onclick="vmAction(${vm.id},'start');closeModal('vm-detail-modal')">▶ Start</button>`}
+        <button class="btn btn-outline" onclick="vmAction(${vm.id},'console');closeModal('vm-detail-modal')">⌨ Console</button>
+        <button class="btn btn-outline" onclick="vmAction(${vm.id},'snapshot');closeModal('vm-detail-modal')">📸 Snapshot</button>
+        ${vm.status==='running'?`<button class="btn btn-outline" onclick="vmAction(${vm.id},'migrate');closeModal('vm-detail-modal')">⇄ Migrate</button>`:''}
+      </div>
+    </div>
+    <div style="background:var(--bg3);border-radius:var(--r);padding:12px">
+      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">SSH Command</div>
+      <code style="font-family:var(--mono);font-size:12px;color:var(--cyan)">ssh ubuntu@${Nodes[1].ip} -p 30022</code>
+    </div>`;
+  openModal('vm-detail-modal');
+}
+
+// ── CREATE VM ─────────────────────────────────────────────────────────────────
+function showCreateVM(os='ubuntu') {
+  selectedOS = os;
+  document.querySelectorAll('.os-tile').forEach(t => t.classList.toggle('selected', t.dataset.os===os));
+  updateKubectlPreview();
+  openModal('create-vm-modal');
+}
+
+function selectOS(el) {
+  document.querySelectorAll('.os-tile').forEach(t=>t.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedOS = el.dataset.os;
+  updateKubectlPreview();
+}
+
+function updateKubectlPreview() {
+  const name = document.getElementById('vm-name')?.value || 'ubuntu-vm-01';
+  const ns   = document.getElementById('vm-ns')?.value || 'vms';
+  document.getElementById('kubectl-preview').textContent =
+    `kubectl apply -f ubuntu-vm.yaml\n# or:\nvirtctl start ${name} -n ${ns}`;
+}
+
+function generateYAML() {
+  const name = document.getElementById('vm-name').value || 'my-vm';
+  const ns   = document.getElementById('vm-ns').value;
+  const cpu  = document.getElementById('vm-cpu').value;
+  const mem  = document.getElementById('vm-mem').value;
+  const disk = document.getElementById('vm-disk').value;
+  const sc   = document.getElementById('vm-sc').value;
+  const sshKey = document.getElementById('vm-ssh-key').value || 'ssh-rsa AAAA... your-key-here';
+  const url  = osURLs[selectedOS] || osURLs.ubuntu;
+
+  const yaml = `apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: ${name}-boot
+  namespace: ${ns}
+spec:
+  source:
+    http:
+      url: "${url}"
+  pvc:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: ${disk}
+    storageClassName: ${sc}
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: ${name}
+  namespace: ${ns}
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: ${name}
+    spec:
+      domain:
+        cpu:
+          cores: ${cpu}
+        memory:
+          guest: ${mem}
+        resources:
+          requests:
+            memory: ${mem}
+            cpu: "${cpu}"
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: boot-disk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit-disk
+              disk:
+                bus: virtio
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: boot-disk
+          dataVolume:
+            name: ${name}-boot
+        - name: cloudinit-disk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: ${name}
+              users:
+                - name: ubuntu
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ${sshKey}
+              packages: [qemu-guest-agent]
+              runcmd: [systemctl enable --now qemu-guest-agent]`;
+
+  const blob = new Blob([yaml], {type:'text/yaml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}.yaml`;
+  a.click();
+  toast('YAML exported successfully', 'success');
+}
+
+function createVM() {
+  const name = document.getElementById('vm-name').value || 'my-vm';
+  closeModal('create-vm-modal');
+  const newVM = {
+    id: VMs.length+1, name, ns:'vms', status:'starting', node:'—', cpu:2, mem:4,
+    memUsed:0, cpuUsed:0, ip:'—', os:selectedOS, osName:'Ubuntu 24.04',
+    disk:'20Gi', sc:'openebs-hostpath', age:'just now', uptime:'—'
+  };
+  VMs.push(newVM);
+  document.getElementById('vm-count').textContent = VMs.length;
+  renderVMs(VMs);
+  toast(`VM "${name}" creation started`, 'success');
+  setTimeout(() => {
+    newVM.status='running'; newVM.node='worker-01';
+    newVM.ip=`172.20.0.5${VMs.length}`; newVM.cpuUsed=15; newVM.memUsed=1.2;
+    renderVMs(VMs);
+    toast(`VM "${name}" is now running`, 'success');
+  }, 3000);
+}
+
+// ── CONSOLE ───────────────────────────────────────────────────────────────────
+const consoleMock = {
+  'get vms -n vms':         ()=>`NAME           STATUS    NODE       IP\nubuntu-vm-01   Running   worker-01  172.20.0.51\nubuntu-vm-02   Running   worker-02  172.20.0.52\nrocky-vm-01    Running   worker-01  172.20.0.54\nfedora-vm-01   Stopped   -          -\ndebian-vm-01   Stopped   -          -`,
+  'get nodes -o wide':      ()=>`NAME                STATUS   ROLES           AGE   VERSION   INTERNAL-IP\ncontrol-plane-01   Ready    control-plane   5d    v1.30.0   192.168.1.10\nworker-01          Ready    worker          5d    v1.30.0   192.168.1.11\nworker-02          Ready    worker          5d    v1.30.0   192.168.1.12`,
+  'get pvc -n vms':         ()=>`NAME                STATUS  CAPACITY  STORAGECLASS\nubuntu-vm-01-boot   Bound   20Gi      openebs-hostpath\nubuntu-vm-02-boot   Bound   50Gi      openebs-hostpath\nrocky-vm-01-boot    Bound   50Gi      openebs-lvm`,
+  'get sc':                 ()=>`NAME                       PROVISIONER          DEFAULT\nopenebs-hostpath (default) openebs.io/local     true\nopenebs-lvm                local.csi.openebs.io false`,
+  'get all -n kubevirt':    ()=>`NAME                              READY  STATUS    RESTARTS\npod/virt-api-...                  1/1    Running   0\npod/virt-controller-...           1/1    Running   0\npod/virt-handler-worker-01        1/1    Running   0\npod/virt-handler-worker-02        1/1    Running   0\n\nkubevirt.kubevirt.io/kubevirt    AVAILABLE  TRUE`,
+};
+
+function showConsoleModal() { openModal('console-modal'); setTimeout(()=>document.getElementById('console-input').focus(),200); }
+
+function handleConsoleInput(e) { if(e.key==='Enter') runConsoleCmd(); }
+
+function quickCmd(cmd) { document.getElementById('console-input').value=cmd; runConsoleCmd(); }
+
+function runConsoleCmd() {
+  const inp = document.getElementById('console-input');
+  const cmd = inp.value.trim().replace(/^kubectl\s*/,'');
+  if(!cmd) return;
+  const out = document.getElementById('console-output');
+  const addLine = (text, cls='') => {
+    const d=document.createElement('div');
+    d.className='console-line'+(cls?' '+cls:'');
+    d.textContent=text; out.appendChild(d); out.scrollTop=out.scrollHeight;
+  };
+  addLine(`virtcloud $ kubectl ${cmd}`, 'prompt');
+  const result = consoleMock[cmd] ? consoleMock[cmd]() : `Error: unknown command or not mocked in demo. Real cluster required.\nTry: get vms -n vms | get nodes -o wide | get pvc -n vms`;
+  const isErr = result.startsWith('Error');
+  result.split('\n').forEach(line => addLine(line, isErr?'err':line.startsWith('NAME')?'info':''));
+  addLine('');
+  inp.value='';
+}
+
+function clearConsole() {
+  const out = document.getElementById('console-output');
+  out.innerHTML='<div class="console-line info">Console cleared.</div><div class="console-line prompt">virtcloud $ </div>';
+}
+
+// ── MODAL HELPERS ─────────────────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close modal on backdrop click
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if(e.target===m) m.classList.remove('open'); });
+});
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+function toast(msg, type='info') {
+  const icons = { success:'✅', error:'❌', info:'ℹ️' };
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span>${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  document.getElementById('toast-container').appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+// ── LIVE UPDATES ──────────────────────────────────────────────────────────────
+setInterval(() => {
+  VMs.forEach(vm => {
+    if(vm.status==='running') {
+      vm.cpuUsed = Math.max(5, Math.min(95, vm.cpuUsed + (Math.random()-0.5)*8));
+      vm.memUsed = Math.max(0.5, Math.min(vm.mem*0.95, vm.memUsed + (Math.random()-0.5)*0.3));
+      vm.cpuUsed = Math.round(vm.cpuUsed);
+      vm.memUsed = Math.round(vm.memUsed*10)/10;
+    }
+  });
+  if(document.getElementById('view-vms').style.display !== 'none') renderVMs(VMs);
+}, 3000);
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+renderVMs(VMs);
+document.querySelectorAll('#vm-name, #vm-ns, #vm-cpu, #vm-mem').forEach(el =>
+  el?.addEventListener('input', updateKubectlPreview));
+</script>
+</body>
+</html>

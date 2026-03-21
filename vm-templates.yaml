@@ -1,0 +1,322 @@
+# =============================================================================
+# VirtCloud — Additional VM Templates
+# Templates for: Fedora 39, Debian 12, Rocky Linux 9, Alpine
+# =============================================================================
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FEDORA 39 VM
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: fedora-vm-01-boot
+  namespace: vms
+spec:
+  source:
+    http:
+      url: "https://download.fedoraproject.org/pub/fedora/linux/releases/39/Cloud/x86_64/images/Fedora-Cloud-Base-39-1.5.x86_64.qcow2"
+  pvc:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: openebs-hostpath
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: fedora-vm-01
+  namespace: vms
+  labels:
+    virtcloud/os: fedora-39
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: fedora-vm-01
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: "2"
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: boot-disk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit-disk
+              disk:
+                bus: virtio
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: boot-disk
+          dataVolume:
+            name: fedora-vm-01-boot
+        - name: cloudinit-disk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: fedora-vm-01
+              users:
+                - name: fedora
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here
+              packages:
+                - qemu-guest-agent
+              runcmd:
+                - systemctl enable --now qemu-guest-agent
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# DEBIAN 12 (BOOKWORM) VM
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: debian-vm-01-boot
+  namespace: vms
+spec:
+  source:
+    http:
+      url: "https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-generic-amd64.qcow2"
+  pvc:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: openebs-hostpath
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: debian-vm-01
+  namespace: vms
+  labels:
+    virtcloud/os: debian-12
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: debian-vm-01
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 2Gi
+        resources:
+          requests:
+            memory: 2Gi
+            cpu: "2"
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: boot-disk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit-disk
+              disk:
+                bus: virtio
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: boot-disk
+          dataVolume:
+            name: debian-vm-01-boot
+        - name: cloudinit-disk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: debian-vm-01
+              users:
+                - name: debian
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here
+              packages:
+                - qemu-guest-agent
+              runcmd:
+                - systemctl enable --now qemu-guest-agent
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# ROCKY LINUX 9 VM
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: rocky-vm-01-boot
+  namespace: vms
+spec:
+  source:
+    http:
+      url: "https://dl.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2"
+  pvc:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 20Gi
+    storageClassName: openebs-hostpath
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: rocky-vm-01
+  namespace: vms
+  labels:
+    virtcloud/os: rocky-9
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: rocky-vm-01
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 4Gi
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: "2"
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: boot-disk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit-disk
+              disk:
+                bus: virtio
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: boot-disk
+          dataVolume:
+            name: rocky-vm-01-boot
+        - name: cloudinit-disk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: rocky-vm-01
+              users:
+                - name: rocky
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here
+              packages:
+                - qemu-guest-agent
+              runcmd:
+                - systemctl enable --now qemu-guest-agent
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+# ALPINE LINUX VM (ultra-lightweight, 128MB RAM)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: cdi.kubevirt.io/v1beta1
+kind: DataVolume
+metadata:
+  name: alpine-vm-01-boot
+  namespace: vms
+spec:
+  source:
+    http:
+      url: "https://dl-cdn.alpinelinux.org/alpine/v3.19/releases/cloud/nocloud_alpine-3.19.0-x86_64-bios-cloudinit-r0.qcow2"
+  pvc:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 5Gi
+    storageClassName: openebs-hostpath
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: alpine-vm-01
+  namespace: vms
+  labels:
+    virtcloud/os: alpine-319
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: alpine-vm-01
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        memory:
+          guest: 512Mi
+        resources:
+          requests:
+            memory: 512Mi
+            cpu: "1"
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: boot-disk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit-disk
+              disk:
+                bus: virtio
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: boot-disk
+          dataVolume:
+            name: alpine-vm-01-boot
+        - name: cloudinit-disk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: alpine-vm-01
+              users:
+                - name: alpine
+                  sudo: ALL=(ALL) NOPASSWD:ALL
+                  ssh_authorized_keys:
+                    - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here

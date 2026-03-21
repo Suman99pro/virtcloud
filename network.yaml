@@ -1,0 +1,100 @@
+# =============================================================================
+# VirtCloud — KubeOVN Network Configuration
+# Creates: VM subnet, VPC, and Multus network attachment definitions
+# =============================================================================
+
+# ── VPC (Virtual Private Cloud) ───────────────────────────────────────────────
+apiVersion: kubeovn.io/v1
+kind: Vpc
+metadata:
+  name: virtcloud-vpc
+spec:
+  namespaces:
+    - vms
+    - default
+
+---
+# ── VM Subnet ──────────────────────────────────────────────────────────────────
+# Dedicated subnet for virtual machines with DHCP enabled
+apiVersion: kubeovn.io/v1
+kind: Subnet
+metadata:
+  name: vm-subnet
+spec:
+  vpc: virtcloud-vpc
+  cidrBlock: 172.20.0.0/24
+  gateway: 172.20.0.1
+  protocol: IPv4
+  namespaces:
+    - vms
+  excludeIps:
+    - 172.20.0.1..172.20.0.10   # Reserve gateway and infra IPs
+  dhcpV4Options:
+    # Optional: Set DNS servers for VMs
+    options: "6,8.8.8.8,8.8.4.4"
+  enableDHCP: true
+  enableIPv6DHCP: false
+  enableEcmp: false
+  gatewayType: distributed
+
+---
+# ── External / Provider Network ───────────────────────────────────────────────
+# Uncomment and configure for direct external access (flat network)
+# apiVersion: kubeovn.io/v1
+# kind: ProviderNetwork
+# metadata:
+#   name: provider-network
+# spec:
+#   defaultInterface: eth1    # Physical interface for external access
+#   customInterfaces: []
+# ---
+# apiVersion: kubeovn.io/v1
+# kind: Vlan
+# metadata:
+#   name: vlan-external
+# spec:
+#   id: 0
+#   provider: provider-network
+# ---
+# apiVersion: kubeovn.io/v1
+# kind: Subnet
+#   name: external-subnet
+# spec:
+#   cidrBlock: 192.168.1.0/24
+#   gateway: 192.168.1.1
+#   vlan: vlan-external
+#   externalEgressGateway: 192.168.1.1
+
+---
+# ── Multus Network Attachment Definition for VMs ──────────────────────────────
+# Allows VMs to attach directly to the OVN subnet
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: ovn-net
+  namespace: vms
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: ovn-kubernetes.io/subnet
+spec:
+  config: |
+    {
+      "cniVersion": "0.3.1",
+      "name": "ovn-net",
+      "type": "kube-ovn",
+      "server_socket": "/run/openvswitch/kube-ovn-daemon.sock",
+      "provider": "ovn-net.vms.ovn",
+      "subnet": "vm-subnet"
+    }
+
+---
+# ── IP Pool for VM static assignment ──────────────────────────────────────────
+apiVersion: kubeovn.io/v1
+kind: IPPool
+metadata:
+  name: vm-ippool
+spec:
+  subnet: vm-subnet
+  ips:
+    - 172.20.0.50..172.20.0.100   # Pool for VMs
+  namespaces:
+    - vms
