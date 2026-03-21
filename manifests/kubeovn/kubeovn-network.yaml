@@ -1,9 +1,10 @@
 # =============================================================================
 # VirtCloud — KubeOVN Network Configuration
-# Creates: VM subnet, VPC, and Multus network attachment definitions
+# Apply  : kubectl apply -f manifests/kubeovn/kubeovn-network.yaml
+# Requires: KubeOVN CNI installed (scripts/03-install-cni.sh with CNI_PLUGIN=kubeovn)
 # =============================================================================
 
-# ── VPC (Virtual Private Cloud) ───────────────────────────────────────────────
+# ── VPC ───────────────────────────────────────────────────────────────────────
 apiVersion: kubeovn.io/v1
 kind: Vpc
 metadata:
@@ -14,8 +15,7 @@ spec:
     - default
 
 ---
-# ── VM Subnet ──────────────────────────────────────────────────────────────────
-# Dedicated subnet for virtual machines with DHCP enabled
+# ── VM Subnet ─────────────────────────────────────────────────────────────────
 apiVersion: kubeovn.io/v1
 kind: Subnet
 metadata:
@@ -28,46 +28,26 @@ spec:
   namespaces:
     - vms
   excludeIps:
-    - 172.20.0.1..172.20.0.10   # Reserve gateway and infra IPs
-  dhcpV4Options:
-    # Optional: Set DNS servers for VMs
-    options: "6,8.8.8.8,8.8.4.4"
+    - 172.20.0.1..172.20.0.10
   enableDHCP: true
   enableIPv6DHCP: false
-  enableEcmp: false
   gatewayType: distributed
 
 ---
-# ── External / Provider Network ───────────────────────────────────────────────
-# Uncomment and configure for direct external access (flat network)
-# apiVersion: kubeovn.io/v1
-# kind: ProviderNetwork
-# metadata:
-#   name: provider-network
-# spec:
-#   defaultInterface: eth1    # Physical interface for external access
-#   customInterfaces: []
-# ---
-# apiVersion: kubeovn.io/v1
-# kind: Vlan
-# metadata:
-#   name: vlan-external
-# spec:
-#   id: 0
-#   provider: provider-network
-# ---
-# apiVersion: kubeovn.io/v1
-# kind: Subnet
-#   name: external-subnet
-# spec:
-#   cidrBlock: 192.168.1.0/24
-#   gateway: 192.168.1.1
-#   vlan: vlan-external
-#   externalEgressGateway: 192.168.1.1
+# ── IP Pool for VM assignment ─────────────────────────────────────────────────
+apiVersion: kubeovn.io/v1
+kind: IPPool
+metadata:
+  name: vm-ippool
+spec:
+  subnet: vm-subnet
+  ips:
+    - 172.20.0.50..172.20.0.100
+  namespaces:
+    - vms
 
 ---
-# ── Multus Network Attachment Definition for VMs ──────────────────────────────
-# Allows VMs to attach directly to the OVN subnet
+# ── Multus NetworkAttachmentDefinition ───────────────────────────────────────
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
@@ -85,16 +65,3 @@ spec:
       "provider": "ovn-net.vms.ovn",
       "subnet": "vm-subnet"
     }
-
----
-# ── IP Pool for VM static assignment ──────────────────────────────────────────
-apiVersion: kubeovn.io/v1
-kind: IPPool
-metadata:
-  name: vm-ippool
-spec:
-  subnet: vm-subnet
-  ips:
-    - 172.20.0.50..172.20.0.100   # Pool for VMs
-  namespaces:
-    - vms

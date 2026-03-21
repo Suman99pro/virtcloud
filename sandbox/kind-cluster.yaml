@@ -1,0 +1,53 @@
+# =============================================================================
+# VirtCloud Sandbox — KinD Cluster Configuration
+# 3 nodes: 1 control-plane + 2 workers (each is a Docker container)
+# =============================================================================
+
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: virtcloud-sandbox
+
+nodes:
+  - role: control-plane
+    image: kindest/node:v1.30.0
+    labels:
+      ingress-ready: "true"
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 30080
+        protocol: TCP
+      - containerPort: 30022
+        hostPort: 30022
+        protocol: TCP
+      - containerPort: 31001
+        hostPort: 31001
+        protocol: TCP
+    extraMounts:
+      - hostPath: /tmp/virtcloud-sandbox/control-plane
+        containerPath: /var/openebs/local
+        propagation: Bidirectional
+
+  - role: worker
+    image: kindest/node:v1.30.0
+    labels:
+      worker-id: "01"
+    extraMounts:
+      - hostPath: /tmp/virtcloud-sandbox/worker-01
+        containerPath: /var/openebs/local
+        propagation: Bidirectional
+
+  - role: worker
+    image: kindest/node:v1.30.0
+    labels:
+      worker-id: "02"
+    extraMounts:
+      - hostPath: /tmp/virtcloud-sandbox/worker-02
+        containerPath: /var/openebs/local
+        propagation: Bidirectional
+
+networking:
+  disableDefaultCNI: true
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+  apiServerAddress: "127.0.0.1"
+  apiServerPort: 6443

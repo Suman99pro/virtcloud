@@ -1,0 +1,173 @@
+# =============================================================================
+# VirtCloud Sandbox — Ubuntu VM (ContainerDisk edition)
+# No cloud image download needed — starts in ~30 seconds
+# Apply: kubectl apply -f sandbox/ubuntu-vm-sandbox.yaml
+# SSH  : ssh ubuntu@localhost -p 30022   password: sandbox123
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vms
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ubuntu-sandbox-cloudinit
+  namespace: vms
+type: Opaque
+stringData:
+  userdata: |
+    #cloud-config
+    hostname: ubuntu-sandbox-vm
+    users:
+      - name: ubuntu
+        sudo: ALL=(ALL) NOPASSWD:ALL
+        shell: /bin/bash
+        lock_passwd: false
+        passwd: "$6$rounds=4096$saltsalt$hashedpassword"
+    chpasswd:
+      list: |
+        ubuntu:sandbox123
+      expire: false
+    packages:
+      - qemu-guest-agent
+      - curl
+      - vim
+      - net-tools
+    runcmd:
+      - systemctl enable --now qemu-guest-agent
+      - echo "VirtCloud Sandbox VM" > /etc/motd
+      - echo "SSH: ssh ubuntu@localhost -p 30022 | Password: sandbox123" >> /etc/motd
+
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: ubuntu-sandbox-vm
+  namespace: vms
+  labels:
+    virtcloud/env: sandbox
+    virtcloud/os: ubuntu-2404
+spec:
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: ubuntu-sandbox-vm
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        memory:
+          guest: 1Gi
+        resources:
+          requests:
+            memory: 1Gi
+            cpu: "500m"
+          limits:
+            memory: 1500Mi
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit
+              disk:
+                bus: virtio
+          rng: {}
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/ubuntu-container-disk:2404
+            imagePullPolicy: IfNotPresent
+        - name: cloudinit
+          cloudInitNoCloud:
+            secretRef:
+              name: ubuntu-sandbox-cloudinit
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+
+---
+# SSH NodePort — accessible at localhost:30022
+apiVersion: v1
+kind: Service
+metadata:
+  name: ubuntu-sandbox-vm-ssh
+  namespace: vms
+spec:
+  type: NodePort
+  selector:
+    kubevirt.io/vm: ubuntu-sandbox-vm
+  ports:
+    - name: ssh
+      port: 22
+      targetPort: 22
+      nodePort: 30022
+
+---
+# Cirros test VM — tiny 40MB image, boots in ~10 seconds
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: cirros-test-vm
+  namespace: vms
+  labels:
+    virtcloud/env: sandbox
+spec:
+  running: false
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: cirros-test-vm
+    spec:
+      domain:
+        cpu:
+          cores: 1
+        memory:
+          guest: 256Mi
+        resources:
+          requests:
+            memory: 256Mi
+            cpu: "100m"
+        machine:
+          type: q35
+        devices:
+          interfaces:
+            - name: default
+              masquerade: {}
+              model: virtio
+          disks:
+            - name: containerdisk
+              disk:
+                bus: virtio
+              bootOrder: 1
+            - name: cloudinit
+              disk:
+                bus: virtio
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - name: containerdisk
+          containerDisk:
+            image: quay.io/kubevirt/cirros-container-disk:latest
+            imagePullPolicy: IfNotPresent
+        - name: cloudinit
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              hostname: cirros-test

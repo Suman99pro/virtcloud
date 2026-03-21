@@ -1,13 +1,8 @@
 # =============================================================================
-# VirtCloud UI — Kubernetes Deployment (Production)
-# Serves ui/virtcloud-ui.html via nginx as a Kubernetes pod
-#
-# Before applying:
-#   sudo mkdir -p /opt/virtcloud-ui
-#   scp ui/virtcloud-ui.html user@<each-node>:/opt/virtcloud-ui/index.html
-#
-# Apply: kubectl apply -f manifests/ui/virtcloud-ui.yaml
-# Access: http://<ANY_NODE_IP>:30080
+# VirtCloud UI — Sandbox Deployment
+# Reads ui/virtcloud-ui.html from a ConfigMap (no Docker image build needed)
+# Created by: bootstrap.sh or deploy-ui.sh
+# Access at : http://localhost:30080
 # =============================================================================
 
 apiVersion: v1
@@ -28,8 +23,6 @@ data:
         root /usr/share/nginx/html;
         index index.html;
         server_tokens off;
-        add_header X-Frame-Options "SAMEORIGIN" always;
-        add_header X-Content-Type-Options "nosniff" always;
         location / { try_files $uri /index.html; }
     }
 
@@ -39,8 +32,6 @@ kind: Deployment
 metadata:
   name: virtcloud-ui
   namespace: virtcloud-ui
-  labels:
-    app: virtcloud-ui
 spec:
   replicas: 1
   selector:
@@ -51,6 +42,12 @@ spec:
       labels:
         app: virtcloud-ui
     spec:
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      nodeSelector:
+        ingress-ready: "true"
       containers:
         - name: ui
           image: nginx:alpine
@@ -77,9 +74,8 @@ spec:
               memory: 64Mi
       volumes:
         - name: html
-          hostPath:
-            path: /opt/virtcloud-ui   # index.html must exist here on every node
-            type: DirectoryOrCreate
+          configMap:
+            name: virtcloud-ui-html   # Created by bootstrap.sh / deploy-ui.sh
         - name: nginx-conf
           configMap:
             name: nginx-conf

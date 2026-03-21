@@ -1,10 +1,13 @@
 # =============================================================================
 # VirtCloud — Additional VM Templates
-# Templates for: Fedora 39, Debian 12, Rocky Linux 9, Alpine
+# Apply: kubectl apply -f manifests/vms/vm-templates.yaml
+# Start: virtctl start <vm-name> -n vms
+# =============================================================================
+# Replace all "your-key-here" with your actual SSH public key before applying
 # =============================================================================
 
 # ─────────────────────────────────────────────────────────────────────────────
-# FEDORA 39 VM
+# FEDORA 39
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
@@ -78,14 +81,12 @@ spec:
                   sudo: ALL=(ALL) NOPASSWD:ALL
                   ssh_authorized_keys:
                     - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here
-              packages:
-                - qemu-guest-agent
-              runcmd:
-                - systemctl enable --now qemu-guest-agent
+              packages: [qemu-guest-agent]
+              runcmd: [systemctl enable --now qemu-guest-agent]
 
 ---
 # ─────────────────────────────────────────────────────────────────────────────
-# DEBIAN 12 (BOOKWORM) VM
+# DEBIAN 12 (BOOKWORM)
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
@@ -159,14 +160,12 @@ spec:
                   sudo: ALL=(ALL) NOPASSWD:ALL
                   ssh_authorized_keys:
                     - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here
-              packages:
-                - qemu-guest-agent
-              runcmd:
-                - systemctl enable --now qemu-guest-agent
+              packages: [qemu-guest-agent]
+              runcmd: [systemctl enable --now qemu-guest-agent]
 
 ---
 # ─────────────────────────────────────────────────────────────────────────────
-# ROCKY LINUX 9 VM
+# ROCKY LINUX 9
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
@@ -240,14 +239,12 @@ spec:
                   sudo: ALL=(ALL) NOPASSWD:ALL
                   ssh_authorized_keys:
                     - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC... your-key-here
-              packages:
-                - qemu-guest-agent
-              runcmd:
-                - systemctl enable --now qemu-guest-agent
+              packages: [qemu-guest-agent]
+              runcmd: [systemctl enable --now qemu-guest-agent]
 
 ---
 # ─────────────────────────────────────────────────────────────────────────────
-# ALPINE LINUX VM (ultra-lightweight, 128MB RAM)
+# ALPINE 3.19 (ultra-lightweight)
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume

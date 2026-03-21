@@ -1,19 +1,15 @@
 # =============================================================================
-# VirtCloud — Ubuntu 24.04 Virtual Machine Manifest
-# Usage: kubectl apply -f manifests/vms/ubuntu-vm.yaml
+# VirtCloud — Ubuntu 24.04 Virtual Machine (Production)
+# Usage  : kubectl apply -f manifests/vms/ubuntu-vm.yaml
+# SSH    : ssh ubuntu@<NODE_IP> -p 30022
+# Console: virtctl console ubuntu-vm-01 -n vms
 # =============================================================================
-#
-# Customizable variables (use envsubst or edit directly):
-#   VM_NAME         - Name of the VM (default: ubuntu-vm-01)
-#   VM_NAMESPACE    - Namespace (default: default)
-#   VM_CPU_CORES    - vCPU count (default: 2)
-#   VM_MEMORY       - RAM (default: 4Gi)
-#   VM_DISK_SIZE    - Boot disk size (default: 20Gi)
-#   STORAGE_CLASS   - StorageClass to use (default: openebs-hostpath)
-#   SSH_PUBLIC_KEY  - Your SSH public key for cloud-init
+# Before applying:
+#   1. Replace the SSH public key below with your actual key
+#   2. Adjust cpu/memory/disk if needed
+#   3. Set storageClassName to match your installed storage plugin
 # =============================================================================
 
-# ── Namespace ─────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -22,8 +18,7 @@ metadata:
     app.kubernetes.io/managed-by: virtcloud
 
 ---
-# ── SSH Key Secret (cloud-init) ───────────────────────────────────────────────
-# Replace the placeholder below with your actual SSH public key
+# ── Cloud-init Secret ─────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Secret
 metadata:
@@ -52,20 +47,14 @@ stringData:
     runcmd:
       - systemctl enable --now qemu-guest-agent
       - echo "VirtCloud VM ready" > /etc/motd
-    power_state:
-      mode: reboot
-      timeout: 30
-      condition: true
 
 ---
-# ── DataVolume — pulls Ubuntu 24.04 cloud image ───────────────────────────────
+# ── DataVolume — downloads Ubuntu 24.04 cloud image ──────────────────────────
 apiVersion: cdi.kubevirt.io/v1beta1
 kind: DataVolume
 metadata:
   name: ubuntu-vm-01-boot
   namespace: vms
-  annotations:
-    cdi.kubevirt.io/storage.deleteAfterCompletion: "false"
 spec:
   source:
     http:
@@ -76,7 +65,7 @@ spec:
     resources:
       requests:
         storage: 20Gi
-    storageClassName: openebs-hostpath  # Change to: longhorn | openebs-lvm | rook-ceph-block
+    storageClassName: openebs-hostpath   # Change to: openebs-lvm | longhorn | rook-ceph-block
 
 ---
 # ── VirtualMachine ────────────────────────────────────────────────────────────
@@ -88,29 +77,22 @@ metadata:
   labels:
     app: ubuntu-vm-01
     virtcloud/os: ubuntu-2404
-    virtcloud/role: general
 spec:
-  running: true   # Set to false to create VM in stopped state
+  running: true
 
   template:
     metadata:
       labels:
         kubevirt.io/vm: ubuntu-vm-01
     spec:
-      # ── Scheduling ──────────────────────────────────────────────────────────
-      nodeSelector: {}          # Pin to specific node if needed
-      tolerations: []
-      affinity: {}
-
-      # ── Domain spec ─────────────────────────────────────────────────────────
       domain:
         cpu:
-          cores: 2              # ← Change VM_CPU_CORES
+          cores: 2             # vCPU count
           threads: 1
           sockets: 1
-          model: host-passthrough    # Passes host CPU features to VM
+          model: host-passthrough
         memory:
-          guest: 4Gi            # ← Change VM_MEMORY
+          guest: 4Gi
         resources:
           requests:
             memory: 4Gi
@@ -118,30 +100,17 @@ spec:
           limits:
             memory: 4Gi
             cpu: "2"
-
-        # ── Machine type ──────────────────────────────────────────────────────
         machine:
           type: q35
-
-        # ── Firmware / BIOS ───────────────────────────────────────────────────
         firmware:
           bootloader:
             efi:
               secureBoot: false
-
-        # ── Devices ───────────────────────────────────────────────────────────
         devices:
-          # Network interfaces
           interfaces:
             - name: default
-              masquerade: {}    # NAT via pod network
+              masquerade: {}
               model: virtio
-            # Uncomment for bridge networking (requires KubeOVN multus config):
-            # - name: ovn-net
-            #   bridge: {}
-            #   model: virtio
-
-          # Disks
           disks:
             - name: boot-disk
               disk:
@@ -150,26 +119,12 @@ spec:
             - name: cloudinit-disk
               disk:
                 bus: virtio
+          rng: {}
 
-          # Enable tablet for better mouse support
-          inputs:
-            - type: tablet
-              bus: usb
-              name: tablet
-
-          # QEMU Guest Agent channel
-          rng: {}   # Hardware random number generator
-
-      # ── Networks ──────────────────────────────────────────────────────────
       networks:
         - name: default
-          pod: {}               # Uses pod network (KubeOVN/Flannel/Calico)
-        # Uncomment to add a secondary OVN network:
-        # - name: ovn-net
-        #   multus:
-        #     networkName: ovn-net
+          pod: {}
 
-      # ── Volumes ─────────────────────────────────────────────────────────────
       volumes:
         - name: boot-disk
           dataVolume:
@@ -179,7 +134,6 @@ spec:
             secretRef:
               name: ubuntu-vm-01-cloudinit
 
-      # ── Readiness / Liveness ────────────────────────────────────────────────
       readinessProbe:
         guestAgentPing: {}
         periodSeconds: 10
@@ -187,14 +141,12 @@ spec:
         failureThreshold: 10
 
 ---
-# ── Service — SSH access ──────────────────────────────────────────────────────
+# ── SSH NodePort ──────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
 metadata:
   name: ubuntu-vm-01-ssh
   namespace: vms
-  labels:
-    app: ubuntu-vm-01
 spec:
   type: NodePort
   selector:
@@ -203,21 +155,5 @@ spec:
     - name: ssh
       port: 22
       targetPort: 22
-      nodePort: 30022    # Access via: ssh ubuntu@<ANY_NODE_IP> -p 30022
+      nodePort: 30022
       protocol: TCP
-
----
-# ── Service — VNC access (via virtctl) ───────────────────────────────────────
-apiVersion: v1
-kind: Service
-metadata:
-  name: ubuntu-vm-01-vnc
-  namespace: vms
-spec:
-  type: ClusterIP
-  selector:
-    kubevirt.io/vm: ubuntu-vm-01
-  ports:
-    - name: vnc
-      port: 5900
-      targetPort: 5900

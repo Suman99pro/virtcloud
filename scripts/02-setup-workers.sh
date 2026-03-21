@@ -3,6 +3,7 @@
 # VirtCloud — Worker Node Setup Script
 # Node OS : Ubuntu 24.04 LTS
 # Run on  : EACH WORKER node (as root or sudo)
+# After this script: run the kubeadm join command from the control plane
 # =============================================================================
 set -euo pipefail
 
@@ -10,8 +11,9 @@ K8S_VERSION="${K8S_VERSION:-1.30}"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 info()    { echo -e "${CYAN}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC} $*"; }
-die()     { echo -e "${RED}[ERR]${NC} $*"; exit 1; }
+success() { echo -e "${GREEN}[OK]${NC}   $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
+die()     { echo -e "${RED}[ERR]${NC}  $*"; exit 1; }
 
 [[ $EUID -ne 0 ]] && die "Run as root: sudo bash $0"
 
@@ -44,14 +46,13 @@ EOF
 sysctl --system > /dev/null
 success "Kernel parameters applied"
 
-# ── 2. Install containerd ──────────────────────────────────────────────────────
+# ── 2. Install containerd ─────────────────────────────────────────────────────
 apt-get update -qq
 apt-get install -y -qq ca-certificates curl gnupg apt-transport-https
 
 install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
-
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
   https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
   > /etc/apt/sources.list.d/docker.list
@@ -69,7 +70,6 @@ success "containerd configured"
 # ── 3. Install Kubernetes components ──────────────────────────────────────────
 curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/Release.key" \
   | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-
 echo "deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
   https://pkgs.k8s.io/core:/stable:/v${K8S_VERSION}/deb/ /" \
   > /etc/apt/sources.list.d/kubernetes.list
@@ -79,13 +79,17 @@ apt-get install -y -qq kubelet kubeadm kubectl
 apt-mark hold kubelet kubeadm kubectl
 success "Kubernetes components installed"
 
-# ── 4. KVM / hardware virt check ─────────────────────────────────────────────
+# ── 4. KVM check ──────────────────────────────────────────────────────────────
 if grep -qE '(vmx|svm)' /proc/cpuinfo; then
   apt-get install -y -qq qemu-kvm libvirt-daemon-system
-  success "KVM hardware virtualization available"
+  success "KVM hardware virtualization detected and enabled"
 else
-  info "No hardware virt detected — KubeVirt will use software emulation"
+  warn "No hardware virtualization detected — KubeVirt will use software emulation"
 fi
 
-success "Worker node ready. Now run the join command from the control plane."
-info "Example: sudo kubeadm join <CP_IP>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>"
+success "================================================="
+success " Worker node ready!"
+success "================================================="
+warn "Now run the join command from the control plane:"
+warn "  sudo bash /tmp/worker-join.sh"
+warn "  (copy /tmp/worker-join.sh from the control plane first)"
