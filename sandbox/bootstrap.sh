@@ -3,37 +3,20 @@
 # VirtCloud Sandbox — Bootstrap Script
 # Creates a full 3-node Kubernetes cluster in Docker on your laptop/VM
 #
-# Requirements: Docker 20+, 8 GB RAM free, 20 GB disk free
+# Requirements: Docker 20+, 6 GB RAM free, 20 GB disk free
 # Usage      : bash sandbox/bootstrap.sh
 # Resume     : bash sandbox/resume-sandbox.sh  (if KubeVirt times out)
 # Destroy    : bash sandbox/teardown.sh
 # =============================================================================
-#
-# FIXES APPLIED vs earlier versions:
-#   1. Removed set -e  → timeouts no longer abort the whole script
-#   2. kind-cluster.yaml has no disableDefaultCNI → no subnet.env errors
-#   3. Flannel installs after kindnet is stable (15s settle delay)
-#   4. Flannel rollout waited before proceeding to storage/kubevirt
-#   5. 'standard' StorageClass removed as default (KinD sets two defaults)
-#   6. Storage uses pod-phase polling, not kubectl wait (avoids false timeout)
-#   7. KubeVirt waits for virt-operator pod before waiting on CR
-#   8. KubeVirt timeout raised to 15 min; graceful exit with resume instructions
-#   9. virtctl downloads to /tmp first, then sudo mv (avoids permission error)
-#  10. All curl commands have --retry 3
-#  11. CDI waits for operator pod before waiting on CR
-# =============================================================================
+set -uo pipefail
 
-set -uo pipefail   # no -e: let each step handle its own errors
-
-# ── Config ────────────────────────────────────────────────────────────────────
-CNI_PLUGIN="${CNI_PLUGIN:-flannel}"          # flannel | calico
-STORAGE_PLUGIN="${STORAGE_PLUGIN:-local-path}"  # local-path | openebs
+CNI_PLUGIN="kindnet"             # kindnet only — no Flannel, no subnet.env errors
+STORAGE_PLUGIN="${STORAGE_PLUGIN:-local-path}"
 KUBEVIRT_VERSION="${KUBEVIRT_VERSION:-v1.2.0}"
 CDI_VERSION="${CDI_VERSION:-v1.58.1}"
 KIND_VERSION="${KIND_VERSION:-v0.23.0}"
 CLUSTER_NAME="virtcloud-sandbox"
 
-# ── Colours ───────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
@@ -41,10 +24,9 @@ success() { echo -e "${GREEN}[OK]${NC}    $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 die()     { echo -e "${RED}[ERR]${NC}   $*"; exit 1; }
 
-# ── Helper: poll pod phase (more reliable than kubectl wait) ──────────────────
 wait_pod_running() {
   local ns="$1" label="$2" desc="$3" max="${4:-48}"
-  info "Waiting for ${desc} to be Running..."
+  info "Waiting for ${desc}..."
   for i in $(seq 1 "$max"); do
     STATUS=$(kubectl get pods -n "$ns" -l "$label" \
       -o jsonpath='{.items[0].status.phase}' 2>/dev/null || echo "")
@@ -56,7 +38,6 @@ wait_pod_running() {
   return 1
 }
 
-# ── Banner ────────────────────────────────────────────────────────────────────
 echo -e "\n${BOLD}${CYAN}  VirtCloud Sandbox Bootstrap"
 echo -e "  3-Node Kubernetes in Docker${NC}\n"
 
@@ -67,14 +48,18 @@ docker info &>/dev/null       || die "Docker daemon not running. Start Docker fi
 success "Docker $(docker --version | awk '{print $3}' | tr -d ',')"
 
 MEM_GB=$(awk '/MemAvailable/{printf "%.0f",$2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
-[[ "$MEM_GB" -lt 5 ]] && warn "Only ~${MEM_GB}GB RAM free. 8GB+ recommended."
+[[ "$MEM_GB" -lt 4 ]] && warn "Only ~${MEM_GB}GB RAM free. 6GB+ recommended."
 
 # ── 2. Install KinD ───────────────────────────────────────────────────────────
 if ! command -v kind &>/dev/null; then
   info "Installing KinD ${KIND_VERSION}..."
   OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-  ARCH=$(uname -m); [[ "$ARCH" == x86_64 ]] && ARCH=amd64; [[ "$ARCH" == aarch64 ]] && ARCH=arm64
-  curl -fsSL --retry 3 "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-${OS}-${ARCH}" -o /tmp/kind
+  ARCH=$(uname -m)
+  [[ "$ARCH" == x86_64  ]] && ARCH=amd64
+  [[ "$ARCH" == aarch64 ]] && ARCH=arm64
+  curl -fsSL --retry 3 \
+    "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-${OS}-${ARCH}" \
+    -o /tmp/kind
   chmod +x /tmp/kind && sudo mv /tmp/kind /usr/local/bin/kind
   success "KinD installed"
 else
@@ -85,13 +70,17 @@ fi
 if ! command -v kubectl &>/dev/null; then
   info "Installing kubectl..."
   OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-  ARCH=$(uname -m); [[ "$ARCH" == x86_64 ]] && ARCH=amd64; [[ "$ARCH" == aarch64 ]] && ARCH=arm64
+  ARCH=$(uname -m)
+  [[ "$ARCH" == x86_64  ]] && ARCH=amd64
+  [[ "$ARCH" == aarch64 ]] && ARCH=arm64
   KVER=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
-  curl -fsSL --retry 3 "https://dl.k8s.io/release/${KVER}/bin/${OS}/${ARCH}/kubectl" -o /tmp/kubectl
+  curl -fsSL --retry 3 \
+    "https://dl.k8s.io/release/${KVER}/bin/${OS}/${ARCH}/kubectl" \
+    -o /tmp/kubectl
   chmod +x /tmp/kubectl && sudo mv /tmp/kubectl /usr/local/bin/kubectl
   success "kubectl installed"
 else
-  success "kubectl: $(kubectl version --client -o json 2>/dev/null | python3 -c 'import sys,json;print(json.load(sys.stdin)["clientVersion"]["gitVersion"])' 2>/dev/null || echo installed)"
+  success "kubectl already installed"
 fi
 
 # ── 4. Install Helm ───────────────────────────────────────────────────────────
@@ -100,7 +89,7 @@ if ! command -v helm &>/dev/null; then
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
   success "Helm installed"
 else
-  success "Helm: $(helm version --short 2>/dev/null || echo installed)"
+  success "Helm already installed"
 fi
 
 # ── 5. Create KinD cluster ────────────────────────────────────────────────────
@@ -116,138 +105,59 @@ fi
 
 mkdir -p /tmp/virtcloud-sandbox/{control-plane,worker-01,worker-02}
 
-# --wait 120s works because kind-cluster.yaml does NOT disable the default CNI
-# (kindnet), so nodes reach Ready during cluster creation itself.
+# KinD uses its built-in kindnet CNI — nodes reach Ready during creation itself
 kind create cluster \
   --name "${CLUSTER_NAME}" \
   --config sandbox/kind-cluster.yaml \
   --wait 120s
 
-success "Cluster created"
+success "Cluster created — all nodes Ready"
 kubectl get nodes
 
-# ── 6. Install Flannel ────────────────────────────────────────────────────────
-# kindnet is already running and keeping pods healthy. Flannel installs on top.
-# We wait 15s for kindnet to fully stabilise before adding Flannel.
-info "Installing CNI: ${CNI_PLUGIN}..."
-sleep 15
+# ── 6. Fix StorageClass defaults ─────────────────────────────────────────────
+info "Configuring StorageClass..."
 
-case "$CNI_PLUGIN" in
-  flannel)
-    kubectl apply -f \
-      https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
+# KinD creates both 'local-path' and 'standard' as default — remove 'standard'
+kubectl patch storageclass standard \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' \
+  2>/dev/null && info "Removed 'standard' as default" || true
 
-    # Tell Flannel to use eth0 — the correct NIC inside KinD node containers
-    kubectl -n kube-flannel patch daemonset kube-flannel-ds \
-      --type json \
-      -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--iface=eth0"}]' \
-      2>/dev/null || true
+kubectl patch storageclass local-path \
+  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
+  2>/dev/null || true
 
-    # Wait for Flannel DaemonSet to fully roll out before proceeding
-    info "Waiting for Flannel DaemonSet rollout..."
-    kubectl rollout status daemonset/kube-flannel-ds \
-      -n kube-flannel --timeout=120s 2>/dev/null || true
+wait_pod_running "local-path-storage" "app=local-path-provisioner" \
+  "local-path-provisioner" 24
 
-    # Verify subnet.env exists (Flannel writes this when it is healthy)
-    info "Verifying Flannel subnet.env on worker nodes..."
-    for attempt in $(seq 1 12); do
-      ENV=$(docker exec virtcloud-sandbox-worker \
-        cat /run/flannel/subnet.env 2>/dev/null || echo "")
-      if [[ -n "$ENV" ]]; then
-        success "Flannel subnet.env confirmed on worker nodes"
-        break
-      fi
-      info "  subnet.env not yet written (${attempt}/12) — waiting 10s..."
-      sleep 10
-    done
+kubectl get storageclass
+success "local-path is the sole default StorageClass"
 
-    success "Flannel ready"
-    ;;
-  calico)
-    kubectl apply -f \
-      https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
-    kubectl rollout status daemonset/calico-node \
-      -n kube-system --timeout=180s 2>/dev/null || true
-    success "Calico ready"
-    ;;
-  *)
-    die "CNI options: flannel | calico"
-    ;;
-esac
+# ── 7. Pre-pull KubeVirt images into KinD nodes ───────────────────────────────
+# Pull on host Docker (fast), then inject into KinD nodes via 'kind load'.
+# This prevents pods from getting stuck in Pending while pulling inside containers.
+info "Pre-pulling KubeVirt ${KUBEVIRT_VERSION} images..."
+info "This may take a few minutes but makes KubeVirt startup instant."
 
-info "Confirming all nodes are Ready..."
-kubectl wait --for=condition=Ready nodes --all --timeout=120s
-kubectl get nodes
+KUBEVIRT_IMAGES=(
+  "quay.io/kubevirt/virt-operator:${KUBEVIRT_VERSION}"
+  "quay.io/kubevirt/virt-api:${KUBEVIRT_VERSION}"
+  "quay.io/kubevirt/virt-controller:${KUBEVIRT_VERSION}"
+  "quay.io/kubevirt/virt-handler:${KUBEVIRT_VERSION}"
+  "quay.io/kubevirt/virt-launcher:${KUBEVIRT_VERSION}"
+)
 
-# ── 7. Configure StorageClass ─────────────────────────────────────────────────
-info "Configuring storage: ${STORAGE_PLUGIN}..."
-
-case "$STORAGE_PLUGIN" in
-  local-path)
-    # KinD ships both 'local-path' and 'standard' marked as default.
-    # Remove 'standard' so only local-path is the default.
-    kubectl patch storageclass standard \
-      -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}' \
-      2>/dev/null && info "Removed 'standard' as default StorageClass" || true
-
-    # Ensure local-path exists (it ships with KinD)
-    if ! kubectl get storageclass local-path &>/dev/null; then
-      info "Installing local-path-provisioner manually..."
-      kubectl apply -f \
-        https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
-    fi
-
-    kubectl patch storageclass local-path \
-      -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' \
-      2>/dev/null || true
-
-    # Poll for provisioner pod
-    wait_pod_running "local-path-storage" "app=local-path-provisioner" \
-      "local-path-provisioner" 24
-
-    kubectl get storageclass
-    success "local-path is the sole default StorageClass"
-    ;;
-
-  openebs)
-    warn "OpenEBS needs 12GB+ RAM and 15 min. Recommended: use default local-path."
-    helm repo add openebs https://openebs.github.io/charts --force-update
-    helm repo update
-    helm install openebs openebs/openebs \
-      --namespace openebs --create-namespace \
-      --set engines.replicated.mayastor.enabled=false \
-      --set engines.local.lvm.enabled=false \
-      --set engines.local.zfs.enabled=false \
-      --set localpv-provisioner.enabled=true \
-      --set ndm.enabled=false \
-      --set ndmOperator.enabled=false \
-      --timeout 15m --wait
-    kubectl apply -f - <<'YAML'
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: openebs-hostpath
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: openebs.io/local
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
-parameters:
-  StorageType: hostpath
-  BasePath: /var/local-path-provisioner
-YAML
-    success "OpenEBS installed"
-    ;;
-
-  *)
-    die "Storage options: local-path (default) | openebs"
-    ;;
-esac
+for img in "${KUBEVIRT_IMAGES[@]}"; do
+  info "  Pulling ${img}..."
+  if docker pull "${img}" 2>/dev/null; then
+    kind load docker-image "${img}" --name "${CLUSTER_NAME}" 2>/dev/null || true
+    success "  Loaded: ${img}"
+  else
+    warn "  Pull failed — will use in-cluster pull (slower)"
+  fi
+done
 
 # ── 8. Install KubeVirt ───────────────────────────────────────────────────────
-info "Installing KubeVirt ${KUBEVIRT_VERSION} (software emulation — no KVM needed)..."
-info "First run pulls ~600MB of images. This takes 5–15 min depending on internet speed."
-info "Tip: pre-pull images to speed this up (see SANDBOX-README.md)"
+info "Installing KubeVirt ${KUBEVIRT_VERSION} (software emulation)..."
 
 kubectl apply -f \
   "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/kubevirt-operator.yaml"
@@ -270,7 +180,6 @@ spec:
     - LiveMigrate
 YAML
 
-# Wait for virt-operator pod first (image pull), then poll CR Available
 wait_pod_running "kubevirt" "kubevirt.io=virt-operator" "virt-operator" 60
 
 info "Waiting for KubeVirt CR to become Available (up to 15 min)..."
@@ -278,30 +187,25 @@ if kubectl -n kubevirt wait kv kubevirt \
     --for condition=Available --timeout=900s 2>/dev/null; then
   success "KubeVirt is ready!"
 else
-  warn "KubeVirt timed out — images are still pulling in the background."
-  warn "Check progress : kubectl -n kubevirt get pods"
-  warn "Once all pods show Running, resume with:"
-  warn "  bash sandbox/resume-sandbox.sh"
+  warn "KubeVirt timed out — run: bash sandbox/resume-sandbox.sh"
   exit 1
 fi
 
 # ── 9. Install virtctl ────────────────────────────────────────────────────────
 info "Installing virtctl ${KUBEVIRT_VERSION}..."
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH=$(uname -m); [[ "$ARCH" == x86_64 ]] && ARCH=amd64; [[ "$ARCH" == aarch64 ]] && ARCH=arm64
-
-# Download to /tmp first to avoid permission errors writing to /usr/local/bin
+ARCH=$(uname -m)
+[[ "$ARCH" == x86_64  ]] && ARCH=amd64
+[[ "$ARCH" == aarch64 ]] && ARCH=arm64
 curl -fsSL --retry 3 \
   "https://github.com/kubevirt/kubevirt/releases/download/${KUBEVIRT_VERSION}/virtctl-${KUBEVIRT_VERSION}-${OS}-${ARCH}" \
   -o /tmp/virtctl
-chmod +x /tmp/virtctl
-sudo mv /tmp/virtctl /usr/local/bin/virtctl
+chmod +x /tmp/virtctl && sudo mv /tmp/virtctl /usr/local/bin/virtctl
 virtctl version --client 2>/dev/null || true
 success "virtctl installed"
 
 # ── 10. Install CDI ───────────────────────────────────────────────────────────
-info "Installing CDI ${CDI_VERSION} (Containerized Data Importer)..."
-
+info "Installing CDI ${CDI_VERSION}..."
 kubectl apply -f \
   "https://github.com/kubevirt/containerized-data-importer/releases/download/${CDI_VERSION}/cdi-operator.yaml"
 kubectl apply -f \
@@ -313,8 +217,7 @@ if kubectl wait --for=condition=Available -n cdi cdi/cdi \
     --timeout=300s 2>/dev/null; then
   success "CDI is ready!"
 else
-  warn "CDI timed out. Check: kubectl -n cdi get pods"
-  warn "Resume with: bash sandbox/resume-sandbox.sh"
+  warn "CDI timed out. Run: bash sandbox/resume-sandbox.sh"
   exit 1
 fi
 
@@ -330,7 +233,7 @@ if [[ -f "ui/virtcloud-ui.html" ]]; then
   success "UI deployed → http://localhost:30080"
 else
   warn "ui/virtcloud-ui.html not found — skipping UI."
-  warn "Run: bash sandbox/deploy-ui.sh  (after placing ui/virtcloud-ui.html)"
+  warn "Run: bash sandbox/deploy-ui.sh"
 fi
 
 # ── Done ──────────────────────────────────────────────────────────────────────
@@ -339,14 +242,13 @@ echo -e "${BOLD}${GREEN}╔═════════════════�
 echo -e "${BOLD}${GREEN}║     VirtCloud Sandbox Ready! 🎉                   ║${NC}"
 echo -e "${BOLD}${GREEN}╠════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  Nodes    : 3 (1 control-plane + 2 workers)        ║${NC}"
-echo -e "${GREEN}║  CNI      : ${CNI_PLUGIN}                                   ║${NC}"
-echo -e "${GREEN}║  Storage  : ${STORAGE_PLUGIN}                          ║${NC}"
+echo -e "${GREEN}║  CNI      : kindnet (built-in)                      ║${NC}"
+echo -e "${GREEN}║  Storage  : local-path                              ║${NC}"
 echo -e "${GREEN}║  KubeVirt : ${KUBEVIRT_VERSION} (emulation mode)            ║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║  UI       : http://localhost:30080                  ║${NC}"
 echo -e "${GREEN}║  VM SSH   : ssh ubuntu@localhost -p 30022           ║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════╣${NC}"
-echo -e "${GREEN}║  Create VM:                                         ║${NC}"
 echo -e "${GREEN}║  kubectl apply -f sandbox/ubuntu-vm-sandbox.yaml   ║${NC}"
 echo -e "${GREEN}║  Destroy  : bash sandbox/teardown.sh                ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════╝${NC}"

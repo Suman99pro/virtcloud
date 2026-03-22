@@ -1,11 +1,9 @@
 # =============================================================================
 # VirtCloud Sandbox — KinD Cluster Configuration
-# 3 nodes: 1 control-plane + 2 workers (each node is a Docker container)
+# 3 nodes: 1 control-plane + 2 workers
 #
-# KEY FIX: disableDefaultCNI is intentionally NOT set.
-# KinD's built-in kindnet handles pod networking from cluster start so pods
-# never get FailedCreatePodSandBox / subnet.env errors. Flannel installs
-# afterward in bootstrap.sh and coexists cleanly.
+# Uses KinD's built-in kindnet CNI — no Flannel, no CNI conflicts,
+# no subnet.env errors. kindnet works perfectly for sandbox purposes.
 # =============================================================================
 
 kind: Cluster
@@ -13,19 +11,18 @@ apiVersion: kind.x-k8s.io/v1alpha4
 name: virtcloud-sandbox
 
 nodes:
-  # ── Control Plane ──────────────────────────────────────────────────────────
   - role: control-plane
     image: kindest/node:v1.30.0
     labels:
       ingress-ready: "true"
     extraPortMappings:
-      - containerPort: 30080   # VirtCloud UI
+      - containerPort: 30080
         hostPort: 30080
         protocol: TCP
-      - containerPort: 30022   # VM SSH
+      - containerPort: 30022
         hostPort: 30022
         protocol: TCP
-      - containerPort: 31001   # CDI upload proxy
+      - containerPort: 31001
         hostPort: 31001
         protocol: TCP
     extraMounts:
@@ -33,7 +30,6 @@ nodes:
         containerPath: /var/local-path-provisioner
         propagation: Bidirectional
 
-  # ── Worker 01 ──────────────────────────────────────────────────────────────
   - role: worker
     image: kindest/node:v1.30.0
     labels:
@@ -43,7 +39,6 @@ nodes:
         containerPath: /var/local-path-provisioner
         propagation: Bidirectional
 
-  # ── Worker 02 ──────────────────────────────────────────────────────────────
   - role: worker
     image: kindest/node:v1.30.0
     labels:
@@ -53,8 +48,9 @@ nodes:
         containerPath: /var/local-path-provisioner
         propagation: Bidirectional
 
-# ── Networking ────────────────────────────────────────────────────────────────
 networking:
+  # kindnet is KinD's default CNI — stable, no extra install needed,
+  # no subnet.env race conditions, pods get IPs immediately.
   podSubnet: "10.244.0.0/16"
   serviceSubnet: "10.96.0.0/12"
   apiServerAddress: "127.0.0.1"
