@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # =============================================================================
 # VirtCloud Sandbox — Deploy / Update UI Dashboard
-# Run from the repo root: bash sandbox/deploy-ui.sh
+# Loads ui/virtcloud-ui.html into a ConfigMap and deploys to Kubernetes
+# Usage: bash sandbox/deploy-ui.sh
 # =============================================================================
-set -euo pipefail
+set -uo pipefail
 
 CYAN='\033[0;36m'; GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
-info()    { echo -e "${CYAN}[INFO]${NC} $*"; }
-success() { echo -e "${GREEN}[OK]${NC}   $*"; }
-die()     { echo -e "${RED}[ERR]${NC}  $*"; exit 1; }
+info()    { echo -e "${CYAN}[INFO]${NC}  $*"; }
+success() { echo -e "${GREEN}[OK]${NC}    $*"; }
+die()     { echo -e "${RED}[ERR]${NC}   $*"; exit 1; }
 
 UI_FILE="${1:-ui/virtcloud-ui.html}"
 
-[[ -f "$UI_FILE" ]] || die "File not found: $UI_FILE\nMake sure ui/virtcloud-ui.html exists in your repo."
+[[ -f "$UI_FILE" ]] || die "File not found: ${UI_FILE}\nMake sure ui/virtcloud-ui.html exists in your repo root."
 
 info "Loading ${UI_FILE} into Kubernetes ConfigMap..."
 kubectl create namespace virtcloud-ui --dry-run=client -o yaml | kubectl apply -f -

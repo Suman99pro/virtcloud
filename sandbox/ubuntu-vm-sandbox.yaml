@@ -1,8 +1,12 @@
 # =============================================================================
 # VirtCloud Sandbox — Ubuntu VM (ContainerDisk edition)
-# No cloud image download needed — starts in ~30 seconds
+# Uses a pre-packaged container image — no cloud image download needed.
+# Boots in ~30 seconds.
+#
 # Apply: kubectl apply -f sandbox/ubuntu-vm-sandbox.yaml
-# SSH  : ssh ubuntu@localhost -p 30022   password: sandbox123
+# SSH  : ssh ubuntu@localhost -p 30022
+# Pass : sandbox123
+# Console: virtctl console ubuntu-sandbox-vm -n vms
 # =============================================================================
 
 apiVersion: v1
@@ -26,7 +30,6 @@ stringData:
         sudo: ALL=(ALL) NOPASSWD:ALL
         shell: /bin/bash
         lock_passwd: false
-        passwd: "$6$rounds=4096$saltsalt$hashedpassword"
     chpasswd:
       list: |
         ubuntu:sandbox123
@@ -39,7 +42,8 @@ stringData:
     runcmd:
       - systemctl enable --now qemu-guest-agent
       - echo "VirtCloud Sandbox VM" > /etc/motd
-      - echo "SSH: ssh ubuntu@localhost -p 30022 | Password: sandbox123" >> /etc/motd
+      - echo "  SSH: ssh ubuntu@localhost -p 30022" >> /etc/motd
+      - echo "  Password: sandbox123" >> /etc/motd
 
 ---
 apiVersion: kubevirt.io/v1
@@ -96,13 +100,14 @@ spec:
           cloudInitNoCloud:
             secretRef:
               name: ubuntu-sandbox-cloudinit
+      # Allow scheduling on control-plane node if workers are busy
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
 
 ---
-# SSH NodePort — accessible at localhost:30022
+# SSH access via localhost:30022
 apiVersion: v1
 kind: Service
 metadata:
@@ -120,6 +125,8 @@ spec:
 
 ---
 # Cirros test VM — tiny 40MB image, boots in ~10 seconds
+# Start with: virtctl start cirros-test-vm -n vms
+# Login: cirros / gocubsgo
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:

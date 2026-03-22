@@ -1,7 +1,7 @@
 # =============================================================================
 # VirtCloud UI — Sandbox Deployment
-# Reads ui/virtcloud-ui.html from a ConfigMap (no Docker image build needed)
-# Created by: bootstrap.sh or deploy-ui.sh
+# Serves ui/virtcloud-ui.html via ConfigMap (no Docker build needed)
+# Deployed by: bootstrap.sh or sandbox/deploy-ui.sh
 # Access at : http://localhost:30080
 # =============================================================================
 
@@ -42,6 +42,7 @@ spec:
       labels:
         app: virtcloud-ui
     spec:
+      # Schedule on control-plane so KinD port mappings work
       tolerations:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
@@ -75,7 +76,7 @@ spec:
       volumes:
         - name: html
           configMap:
-            name: virtcloud-ui-html   # Created by bootstrap.sh / deploy-ui.sh
+            name: virtcloud-ui-html   # created by bootstrap.sh or deploy-ui.sh
         - name: nginx-conf
           configMap:
             name: nginx-conf

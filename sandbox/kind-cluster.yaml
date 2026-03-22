@@ -1,6 +1,11 @@
 # =============================================================================
 # VirtCloud Sandbox — KinD Cluster Configuration
-# 3 nodes: 1 control-plane + 2 workers (each is a Docker container)
+# 3 nodes: 1 control-plane + 2 workers (each node is a Docker container)
+#
+# KEY FIX: disableDefaultCNI is intentionally NOT set.
+# KinD's built-in kindnet handles pod networking from cluster start so pods
+# never get FailedCreatePodSandBox / subnet.env errors. Flannel installs
+# afterward in bootstrap.sh and coexists cleanly.
 # =============================================================================
 
 kind: Cluster
@@ -8,48 +13,48 @@ apiVersion: kind.x-k8s.io/v1alpha4
 name: virtcloud-sandbox
 
 nodes:
+  # ── Control Plane ──────────────────────────────────────────────────────────
   - role: control-plane
     image: kindest/node:v1.30.0
     labels:
       ingress-ready: "true"
     extraPortMappings:
-      - containerPort: 30080
+      - containerPort: 30080   # VirtCloud UI
         hostPort: 30080
         protocol: TCP
-      - containerPort: 30022
+      - containerPort: 30022   # VM SSH
         hostPort: 30022
         protocol: TCP
-      - containerPort: 31001
+      - containerPort: 31001   # CDI upload proxy
         hostPort: 31001
         protocol: TCP
     extraMounts:
       - hostPath: /tmp/virtcloud-sandbox/control-plane
-        containerPath: /var/openebs/local
+        containerPath: /var/local-path-provisioner
         propagation: Bidirectional
 
+  # ── Worker 01 ──────────────────────────────────────────────────────────────
   - role: worker
     image: kindest/node:v1.30.0
     labels:
       worker-id: "01"
     extraMounts:
       - hostPath: /tmp/virtcloud-sandbox/worker-01
-        containerPath: /var/openebs/local
+        containerPath: /var/local-path-provisioner
         propagation: Bidirectional
 
+  # ── Worker 02 ──────────────────────────────────────────────────────────────
   - role: worker
     image: kindest/node:v1.30.0
     labels:
       worker-id: "02"
     extraMounts:
       - hostPath: /tmp/virtcloud-sandbox/worker-02
-        containerPath: /var/openebs/local
+        containerPath: /var/local-path-provisioner
         propagation: Bidirectional
 
+# ── Networking ────────────────────────────────────────────────────────────────
 networking:
-  # NOTE: disableDefaultCNI is intentionally removed.
-  # KinD's built-in kindnet handles pod networking during startup.
-  # Flannel is installed afterward in bootstrap.sh and takes over.
-  # Disabling the default CNI caused FailedCreatePodSandBox errors.
   podSubnet: "10.244.0.0/16"
   serviceSubnet: "10.96.0.0/12"
   apiServerAddress: "127.0.0.1"
