@@ -46,7 +46,10 @@ nodes:
         propagation: Bidirectional
 
 networking:
-  disableDefaultCNI: true
+  # NOTE: disableDefaultCNI is intentionally removed.
+  # KinD's built-in kindnet handles pod networking during startup.
+  # Flannel is installed afterward in bootstrap.sh and takes over.
+  # Disabling the default CNI caused FailedCreatePodSandBox errors.
   podSubnet: "10.244.0.0/16"
   serviceSubnet: "10.96.0.0/12"
   apiServerAddress: "127.0.0.1"

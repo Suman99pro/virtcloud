@@ -113,12 +113,14 @@ fi
 
 mkdir -p /tmp/virtcloud-sandbox/{control-plane,worker-01,worker-02}
 
-# No --wait: nodes stay NotReady until CNI is installed — that is expected
+# KinD's built-in kindnet CNI starts with the cluster so nodes reach Ready quickly.
+# Flannel (or Calico) is installed afterward and takes over pod networking.
 kind create cluster \
   --name "${CLUSTER_NAME}" \
-  --config sandbox/kind-cluster.yaml
+  --config sandbox/kind-cluster.yaml \
+  --wait 120s
 
-info "Cluster created. Nodes NotReady until CNI installs — this is normal."
+info "Cluster created"
 kubectl get nodes
 
 # ── Install CNI ───────────────────────────────────────────────────────────────
@@ -126,18 +128,30 @@ info "Installing CNI: ${CNI_PLUGIN}..."
 
 case "$CNI_PLUGIN" in
   flannel)
+    # Wait briefly to ensure kindnet has fully initialized before replacing it
+    sleep 15
     kubectl apply -f \
       https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-    # Fix Flannel to use eth0 (the correct interface inside KinD containers)
+
+    # Patch Flannel to use eth0 — the correct interface inside KinD containers
     kubectl -n kube-flannel patch daemonset kube-flannel-ds \
       --type json \
       -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--iface=eth0"}]' \
       2>/dev/null || true
+
+    # Wait for Flannel DaemonSet to roll out before proceeding
+    info "Waiting for Flannel pods to be Ready..."
+    kubectl rollout status daemonset/kube-flannel-ds \
+      -n kube-flannel --timeout=120s 2>/dev/null || true
+
     success "Flannel installed"
     ;;
   calico)
+    sleep 15
     kubectl apply -f \
       https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml
+    kubectl rollout status daemonset/calico-node \
+      -n kube-system --timeout=120s 2>/dev/null || true
     success "Calico installed"
     ;;
   *)
